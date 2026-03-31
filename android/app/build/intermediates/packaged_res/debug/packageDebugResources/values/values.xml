@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="action_dismiss">Dismiss</string>
+    <string name="action_locate">Try to locate this device</string>
+    <string name="action_mark_mine">This is my device</string>
+    <string name="app_name">Device Lens</string>
+    <string name="banner_bt_enable">Enable</string>
+    <string name="banner_bt_off">Bluetooth scanning is off — some devices may not be detected.</string>
+    <string name="banner_loc_enable">Enable</string>
+    <string name="banner_loc_off">Location access is off — scanning may be limited.</string>
+    <string name="count_known">Known</string>
+    <string name="count_suspicious">Suspicious</string>
+    <string name="count_unknown">Unknown</string>
+    <string name="detail_first_seen">First seen %1$s</string>
+    <string name="detail_found_ble">Detected via Bluetooth</string>
+    <string name="detail_found_both">Found on Wi-Fi and Bluetooth</string>
+    <string name="detail_found_wifi">Found on your Wi-Fi network</string>
+    <string name="detail_last_seen">Last seen %1$s</string>
+    <string name="detail_made_by">Made by %1$s</string>
+    <string name="detail_unknown_maker">Unrecognised manufacturer</string>
+    <string name="locate_camera_tip">Point your camera slowly at walls and objects. A hidden lens may appear as a bright reflection.</string>
+    <string name="locate_camera_unavailable">Camera unavailable — tracking by signal only</string>
+    <string name="locate_stable">You\'re in the area — look around carefully</string>
+    <string name="locate_stop">Stop locating</string>
+    <string name="locate_stronger">Signal getting stronger — keep moving this way</string>
+    <string name="locate_weaker">Moving away — try the opposite direction</string>
+    <string name="nudge_body">This app detects devices that are actively broadcasting nearby. It cannot detect devices that are switched off or not transmitting.</string>
+    <string name="nudge_dismiss">Got it</string>
+    <string name="phase_analysis">Analysing signals…</string>
+    <string name="phase_ble">Looking for Bluetooth devices…</string>
+    <string name="phase_wifi">Checking Wi-Fi network…</string>
+    <string name="risk_safe">You\'ve identified this as one of your devices.</string>
+    <string name="risk_suspicious">This device is not recognised as yours and was detected nearby with a strong signal. It appeared for the first time recently.</string>
+    <string name="risk_suspicious_emf">This device is not recognised as yours and was detected nearby with a strong signal. An unusual electromagnetic reading was also detected in the area.</string>
+    <string name="risk_unknown">This device is on your network but you haven\'t identified it yet. It could be a neighbour\'s device or a smart home product.</string>
+    <string name="settings_about">About</string>
+    <string name="settings_bg_scan">Background scanning</string>
+    <string name="settings_cancel">Cancel</string>
+    <string name="settings_local_db">Vendor identification uses a locally bundled database.</string>
+    <string name="settings_no_cloud">No data ever leaves your device.</string>
+    <string name="settings_reset">Reset all trusted devices</string>
+    <string name="settings_reset_body">This will remove all your trusted devices and restart setup. Your scan history will be cleared.</string>
+    <string name="settings_reset_confirm">Reset everything</string>
+    <string name="settings_reset_title">Reset everything?</string>
+    <string name="setup_done">Done</string>
+    <string name="setup_subtitle">Mark the devices that belong to you. Everything else will be monitored.</string>
+    <string name="setup_title">Let\'s identify your devices</string>
+    <string name="setup_toggle_label">This is mine</string>
+    <string name="setup_trust_all">Trust all devices here</string>
+    <string name="status_not_calibrated">Setup needed</string>
+    <string name="status_not_calibrated_sub">Tap to identify your devices</string>
+    <string name="status_pull_refresh">Pull to scan again</string>
+    <string name="status_risk">Suspicious device detected</string>
+    <string name="status_safe">All clear</string>
+    <string name="status_scanning">Scanning your environment…</string>
+    <string name="status_see_found">See what was found →</string>
+    <string name="status_warning">Unknown devices nearby</string>
+    <style name="Theme.DeviceLens" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+</resources>
