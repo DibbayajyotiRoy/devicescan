@@ -10,7 +10,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -39,46 +42,92 @@ fun StatusIndicator(
     val pulseAnim = rememberInfiniteTransition(label = "pulse")
     val scale by pulseAnim.animateFloat(
         initialValue = 1f,
-        targetValue = if (status == OverallStatus.SCANNING) 1.15f else 1f,
+        targetValue = if (status == OverallStatus.SCANNING) 1.12f else 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(800, easing = EaseInOutCubic),
+            animation = tween(900, easing = EaseInOutCubic),
             repeatMode = RepeatMode.Reverse
         ),
         label = "pulseScale"
     )
 
+    val glowAlpha by pulseAnim.animateFloat(
+        initialValue = 0.15f,
+        targetValue = if (status == OverallStatus.SCANNING) 0.35f else 0.2f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(900, easing = EaseInOutCubic),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "glowAlpha"
+    )
+
     val label = when (status) {
-        OverallStatus.SAFE -> "Environment Secure"
+        OverallStatus.SAFE -> "Environment secure"
         OverallStatus.WARNING -> "Unknown devices nearby"
         OverallStatus.RISK -> "Suspicious device detected"
-        OverallStatus.SCANNING -> "Scanning your environment…"
-        OverallStatus.NOT_CALIBRATED -> "Start your scan"
+        OverallStatus.SCANNING -> "Scanning environment…"
+        OverallStatus.NOT_CALIBRATED -> "Ready to scan"
     }
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = modifier.padding(vertical = 32.dp)
+        modifier = modifier.padding(vertical = 20.dp)
     ) {
         Box(
             modifier = Modifier
-                .size(100.dp)
-                .scale(scale)
-                .background(color = color.copy(alpha = 0.15f), shape = CircleShape),
+                .size(120.dp)
+                .drawBehind {
+                    // Radial glow behind the circles
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                color.copy(alpha = glowAlpha),
+                                Color.Transparent
+                            ),
+                            center = Offset(size.width / 2, size.height / 2),
+                            radius = size.width * 0.8f
+                        )
+                    )
+                },
             contentAlignment = Alignment.Center
         ) {
+            // Outermost ring — faint
             Box(
                 modifier = Modifier
-                    .size(60.dp)
-                    .background(color = color, shape = CircleShape)
+                    .size(110.dp)
+                    .scale(scale * 0.85f)
+                    .background(
+                        color = color.copy(alpha = 0.06f),
+                        shape = CircleShape
+                    )
+            )
+            // Middle ring
+            Box(
+                modifier = Modifier
+                    .size(80.dp)
+                    .scale(scale * 0.92f)
+                    .background(
+                        color = color.copy(alpha = 0.12f),
+                        shape = CircleShape
+                    )
+            )
+            // Inner circle
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .scale(scale)
+                    .background(
+                        color = color,
+                        shape = CircleShape
+                    )
             )
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
         Text(
             text = label,
             style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
+            fontWeight = FontWeight.SemiBold,
             color = color
         )
     }

@@ -1,6 +1,5 @@
 package com.devicelens.app.ui.details
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -14,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.devicelens.app.ui.components.DeviceTypeIcon
 import com.devicelens.app.ui.theme.RiskRed
 import com.devicelens.app.ui.theme.SafeGreen
 import com.devicelens.app.ui.theme.WarningAmber
@@ -41,12 +41,15 @@ fun DeviceDetailsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(deviceName, fontWeight = FontWeight.SemiBold) },
+                title = {},
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back")
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background
+                )
             )
         }
     ) { padding ->
@@ -57,26 +60,44 @@ fun DeviceDetailsScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp)
         ) {
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Risk badge
+            // Header: Icon + Name + Risk badge
             device?.let { dev ->
                 val (badgeColor, badgeText) = when (dev.riskLevel) {
                     "SAFE" -> SafeGreen to "Safe"
                     "SUSPICIOUS" -> RiskRed to "Suspicious"
                     else -> WarningAmber to "Unknown"
                 }
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = badgeColor.copy(alpha = 0.15f)
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    Text(
-                        text = badgeText,
-                        color = badgeColor,
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    DeviceTypeIcon(
+                        deviceName = dev.deviceName,
+                        vendor = dev.vendor,
+                        modifier = Modifier.size(52.dp)
                     )
+                    Column {
+                        Text(
+                            text = deviceName,
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = badgeColor.copy(alpha = 0.12f)
+                        ) {
+                            Text(
+                                text = badgeText,
+                                color = badgeColor,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
                 }
             }
 
@@ -86,20 +107,49 @@ fun DeviceDetailsScreen(
             Text(
                 text = riskExplanation,
                 style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                lineHeight = MaterialTheme.typography.bodyLarge.lineHeight
             )
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Detail rows
-            DetailRow(madeBy)
-            DetailRow(firstSeen)
-            DetailRow(lastSeen)
-            DetailRow(detectionLabel)
+            // Detail card — grouped key-value rows
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    if (madeBy.isNotEmpty()) {
+                        DetailRow(label = "Manufacturer", value = madeBy.removePrefix("Made by: ").removePrefix("Vendor: "))
+                    }
+                    if (firstSeen.isNotEmpty()) {
+                        DetailRow(label = "First seen", value = firstSeen.removePrefix("First seen: "))
+                    }
+                    if (lastSeen.isNotEmpty()) {
+                        DetailRow(label = "Last seen", value = lastSeen.removePrefix("Last seen: "))
+                    }
+                    if (detectionLabel.isNotEmpty()) {
+                        DetailRow(label = "Detection", value = detectionLabel.removePrefix("Detected via: "))
+                    }
+                    device?.let { dev ->
+                        if (!dev.ipAddress.isNullOrBlank()) {
+                            DetailRow(label = "IP address", value = dev.ipAddress.orEmpty())
+                        }
+                        if (!dev.macAddress.isNullOrBlank()) {
+                            DetailRow(label = "MAC address", value = dev.macAddress.orEmpty())
+                        }
+                        if (dev.openPorts.isNotBlank()) {
+                            DetailRow(label = "Open ports", value = dev.openPorts)
+                        }
+                    }
+                }
+            }
 
-            Spacer(modifier = Modifier.height(24.dp))
-            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(28.dp))
 
             // Actions
             Button(
@@ -143,13 +193,20 @@ fun DeviceDetailsScreen(
 }
 
 @Composable
-private fun DetailRow(text: String) {
-    if (text.isNotEmpty()) {
+private fun DetailRow(label: String, value: String) {
+    Column {
         Text(
-            text = text,
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+            fontWeight = FontWeight.Medium
+        )
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(
+            text = value,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(vertical = 6.dp)
+            fontWeight = FontWeight.Medium
         )
     }
 }

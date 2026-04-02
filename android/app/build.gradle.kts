@@ -25,7 +25,7 @@ android {
 
     buildTypes {
         debug {
-            buildConfigField("String", "BACKEND_API_URL", "\"http://10.0.2.2:3000\"")
+            buildConfigField("String", "BACKEND_API_URL", "\"https://devicescan.onrender.com\"")
         }
         release {
             isMinifyEnabled = true
@@ -34,7 +34,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            buildConfigField("String", "BACKEND_API_URL", "\"https://devicelens-api.up.railway.app\"")
+            buildConfigField("String", "BACKEND_API_URL", "\"https://devicescan.onrender.com\"")
         }
     }
 

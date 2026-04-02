@@ -12,7 +12,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.unit.dp
-import com.devicelens.app.ui.theme.AccentBlue
+import com.devicelens.app.ui.theme.AccentTeal
 
 enum class SignalTrend { STRONGER, STABLE, WEAKER }
 
@@ -54,7 +54,7 @@ fun SignalCircle(
                 .size(180.dp)
                 .scale(animatedScale * pulse * 0.9f)
                 .background(
-                    color = AccentBlue.copy(alpha = 0.08f),
+                    color = AccentTeal.copy(alpha = 0.08f),
                     shape = CircleShape
                 )
         )
@@ -64,7 +64,7 @@ fun SignalCircle(
                 .size(120.dp)
                 .scale(animatedScale * pulse * 0.95f)
                 .background(
-                    color = AccentBlue.copy(alpha = 0.15f),
+                    color = AccentTeal.copy(alpha = 0.15f),
                     shape = CircleShape
                 )
         )
@@ -74,7 +74,7 @@ fun SignalCircle(
                 .size(60.dp)
                 .scale(animatedScale)
                 .background(
-                    color = AccentBlue,
+                    color = AccentTeal,
                     shape = CircleShape
                 )
         )

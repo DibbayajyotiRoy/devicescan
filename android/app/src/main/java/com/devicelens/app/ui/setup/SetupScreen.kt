@@ -32,7 +32,7 @@ fun SetupScreen(
             .fillMaxSize()
             .padding(horizontal = 20.dp)
     ) {
-        Spacer(modifier = Modifier.height(60.dp))
+        Spacer(modifier = Modifier.height(40.dp))
 
         Text(
             text = "Let's identify your devices",

@@ -3,3 +3,26 @@
 /.remember
 /ARCHITECTURE.md
 /MASTER_BUILD_PROMPT.md
+
+# ── Android ────────────────────────────────────────────
+android/.gradle/
+android/build/
+android/app/build/
+!android/app/build/outputs/
+!android/app/build/outputs/apk/
+!android/app/build/outputs/apk/debug/
+!android/app/build/outputs/apk/debug/*.apk
+android/local.properties
+android/*.iml
+android/.idea/
+android/captures/
+
+# ── Backend ────────────────────────────────────────────
+backend/node_modules/
+backend/.env
+
+# ── OS junk ────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+*~

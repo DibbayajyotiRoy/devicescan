@@ -18,10 +18,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.devicelens.app.helpers.DebugLog
+import com.devicelens.app.ui.theme.JetBrainsMonoFamily
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -95,7 +95,7 @@ fun DebugLogScreen(onBack: () -> Unit) {
                     Text(
                         text = entry.formatted(),
                         style = MaterialTheme.typography.bodySmall.copy(
-                            fontFamily = FontFamily.Monospace,
+                            fontFamily = JetBrainsMonoFamily,
                             fontSize = 11.sp,
                             lineHeight = 15.sp
                         ),

@@ -1,24 +1,32 @@
 package com.devicelens.app.ui.status
 
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.BugReport
-import androidx.compose.material.icons.rounded.Refresh
-import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.devicelens.app.domain.model.OverallStatus
 import com.devicelens.app.ui.components.*
 import com.devicelens.app.ui.theme.RiskRed
+import com.devicelens.app.ui.theme.SafeGreen
+import com.devicelens.app.ui.theme.WarningAmber
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -55,18 +63,25 @@ fun StatusScreen(
             CenterAlignedTopAppBar(
                 title = {
                     Text(
-                        "DEVICE LENS",
+                        "Device Lens",
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.ExtraBold,
-                        letterSpacing = 2.sp
+                        fontWeight = FontWeight.Bold,
                     )
                 },
                 actions = {
                     IconButton(onClick = onOpenDebugLog) {
-                        Icon(Icons.Rounded.BugReport, contentDescription = "Debug Logs", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Icon(
+                            Icons.Rounded.BugReport,
+                            contentDescription = "Debug Logs",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        )
                     }
                     IconButton(onClick = onOpenSettings) {
-                        Icon(Icons.Rounded.Settings, contentDescription = "Settings", tint = MaterialTheme.colorScheme.onSurface)
+                        Icon(
+                            Icons.Rounded.Settings,
+                            contentDescription = "Settings",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
@@ -78,7 +93,7 @@ fun StatusScreen(
             ExtendedFloatingActionButton(
                 onClick = { viewModel.restartScan() },
                 icon = { Icon(Icons.Rounded.Refresh, contentDescription = null) },
-                text = { Text("Scan Environment") },
+                text = { Text("Scan environment") },
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
                 expanded = !isScanning,
@@ -93,35 +108,50 @@ fun StatusScreen(
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            item { Spacer(modifier = Modifier.height(8.dp)) }
+            item { Spacer(modifier = Modifier.height(4.dp)) }
 
-            // Diagnostic Warnings
+            // Diagnostic Warnings — using icons, not emoji
             if (!locationEnabled || !bluetoothEnabled) {
                 item {
                     Surface(
-                        color = MaterialTheme.colorScheme.errorContainer,
+                        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.8f),
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Text(
-                                text = "⚠️ Scanning Limited",
-                                style = MaterialTheme.typography.titleSmall,
-                                color = MaterialTheme.colorScheme.onErrorContainer
+                        Row(
+                            modifier = Modifier.padding(14.dp),
+                            verticalAlignment = Alignment.Top,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Icon(
+                                Icons.Rounded.Warning,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onErrorContainer,
+                                modifier = Modifier.size(20.dp)
                             )
-                            Text(
-                                text = buildString {
-                                    if (!locationEnabled) append("• Location Services are OFF. ")
-                                    if (!bluetoothEnabled) append("• Bluetooth is OFF. ")
-                                    append("\nThese are required to detect nearby devices.")
-                                },
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onErrorContainer
-                            )
+                            Column {
+                                Text(
+                                    text = "Scanning limited",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = buildString {
+                                        if (!locationEnabled) append("Location Services are off. ")
+                                        if (!bluetoothEnabled) append("Bluetooth is off. ")
+                                        append("These are required to detect nearby devices.")
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f)
+                                )
+                            }
                         }
                     }
                 }
             }
+
             // Status indicator
             item {
                 StatusIndicator(
@@ -130,19 +160,26 @@ fun StatusScreen(
                 )
             }
 
-            // Location Context
+            // Location context — icon replaces emoji
             item {
                 Surface(
                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
+                        Icon(
+                            Icons.Rounded.LocationOn,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                            modifier = Modifier.size(16.dp)
+                        )
                         Text(
-                            text = "📍 Network Location: ",
+                            text = "Network: ",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -160,14 +197,24 @@ fun StatusScreen(
             // Scan phase
             if (isScanning && scanPhase.isNotEmpty()) {
                 item {
-                    Text(
-                        text = scanPhase,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(bottom = 8.dp)
-                    )
+                            .padding(bottom = 4.dp)
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(14.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = scanPhase,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
 
@@ -180,20 +227,33 @@ fun StatusScreen(
                             onClick = { onDeviceClick(topSuspicious.id) },
                             shape = RoundedCornerShape(14.dp),
                             colors = CardDefaults.cardColors(
-                                containerColor = RiskRed.copy(alpha = 0.1f)
+                                containerColor = RiskRed.copy(alpha = 0.08f)
                             )
                         ) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(16.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
+                                Icon(
+                                    Icons.Rounded.Shield,
+                                    contentDescription = null,
+                                    tint = RiskRed,
+                                    modifier = Modifier.size(18.dp)
+                                )
                                 Text(
-                                    text = "See what was found →",
+                                    text = "See what was found",
                                     style = MaterialTheme.typography.labelLarge,
                                     color = RiskRed,
                                     modifier = Modifier.weight(1f)
+                                )
+                                Icon(
+                                    Icons.Rounded.ChevronRight,
+                                    contentDescription = null,
+                                    tint = RiskRed.copy(alpha = 0.6f),
+                                    modifier = Modifier.size(18.dp)
                                 )
                             }
                         }
@@ -201,26 +261,34 @@ fun StatusScreen(
                 }
             }
 
-            // Count row
+            // Count row — stat cards with colored leading accents
             if (!isScanning) {
                 item {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 12.dp),
-                        horizontalArrangement = Arrangement.SpaceEvenly
+                            .padding(vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        CountLabel("Known", safeCount)
-                        CountLabel("Unknown", unknownCount)
-                        CountLabel("Suspicious", suspiciousCount)
+                        StatCard(
+                            label = "Known",
+                            count = safeCount,
+                            accentColor = SafeGreen,
+                            modifier = Modifier.weight(1f)
+                        )
+                        StatCard(
+                            label = "Unknown",
+                            count = unknownCount,
+                            accentColor = WarningAmber,
+                            modifier = Modifier.weight(1f)
+                        )
+                        StatCard(
+                            label = "Suspicious",
+                            count = suspiciousCount,
+                            accentColor = RiskRed,
+                            modifier = Modifier.weight(1f)
+                        )
                     }
-                }
-
-                item {
-                    HorizontalDivider(
-                        modifier = Modifier.padding(vertical = 4.dp),
-                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
-                    )
                 }
             }
 
@@ -230,37 +298,70 @@ fun StatusScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 60.dp),
+                            .padding(top = 48.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
+                        Icon(
+                            Icons.Rounded.WifiFind,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f),
+                            modifier = Modifier.size(64.dp)
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            "No devices found yet",
+                            "No devices detected",
                             style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            "Ensure Wi-Fi/Bluetooth are ON.\nSome devices may hide their signatures.",
+                            "Make sure Wi-Fi and Bluetooth are enabled,\nthen tap Scan environment.",
                             style = MaterialTheme.typography.bodyMedium,
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                            textAlign = TextAlign.Center,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                         )
                     }
                 }
             } else {
                 item {
-                   Text(
-                       text = "💡 WiFi devices are shown by IP. Bluetooth devices show signal distance.",
-                       style = MaterialTheme.typography.labelSmall,
-                       color = MaterialTheme.colorScheme.secondary,
-                       modifier = Modifier.padding(vertical = 8.dp)
-                   )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.padding(vertical = 6.dp)
+                    ) {
+                        Icon(
+                            Icons.Rounded.Info,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Text(
+                            text = "Wi-Fi devices shown by IP. Bluetooth devices show signal distance.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        )
+                    }
                 }
-                items(devices, key = { it.id }) { device ->
-                    DeviceRow(
-                        device = device,
-                        onClick = { onDeviceClick(device.id) }
-                    )
+                itemsIndexed(devices, key = { _, it -> it.id }) { index, device ->
+                    // Staggered entry animation
+                    var visible by remember { mutableStateOf(false) }
+                    LaunchedEffect(Unit) {
+                        kotlinx.coroutines.delay(index.toLong() * 40)
+                        visible = true
+                    }
+                    AnimatedVisibility(
+                        visible = visible,
+                        enter = fadeIn(tween(300)) + slideInVertically(
+                            initialOffsetY = { it / 4 },
+                            animationSpec = tween(300, easing = EaseOutCubic)
+                        )
+                    ) {
+                        DeviceRow(
+                            device = device,
+                            onClick = { onDeviceClick(device.id) }
+                        )
+                    }
                 }
             }
 
@@ -271,17 +372,50 @@ fun StatusScreen(
 }
 
 @Composable
-private fun CountLabel(label: String, count: Int) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-            text = count.toString(),
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold
-        )
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+private fun StatCard(
+    label: String,
+    count: Int,
+    accentColor: Color,
+    modifier: Modifier = Modifier
+) {
+    val animatedCount by animateIntAsState(
+        targetValue = count,
+        animationSpec = tween(400, easing = EaseOutCubic),
+        label = "count_$label"
+    )
+
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        tonalElevation = 0.dp
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Colored accent bar
+            Box(
+                modifier = Modifier
+                    .width(3.dp)
+                    .height(48.dp)
+                    .clip(RoundedCornerShape(topStart = 12.dp, bottomStart = 12.dp))
+                    .background(accentColor)
+            )
+            Column(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
+            ) {
+                Text(
+                    text = animatedCount.toString(),
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
     }
 }
