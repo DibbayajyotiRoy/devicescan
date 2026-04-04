@@ -461,8 +461,8 @@ class DeviceFingerprinter @Inject constructor() {
         // ── Device with services but unclassified ──
         if (openPorts.isNotEmpty()) return "📡 Network Device"
 
-        // ── Nothing exposed ──  
-        return "☁️ Cloud Device"
+        // ── Nothing exposed ──
+        return "☁️ Mobile Device (limited visibility)"
     }
 
     private fun pickBestName(server: String?, title: String?): String? {

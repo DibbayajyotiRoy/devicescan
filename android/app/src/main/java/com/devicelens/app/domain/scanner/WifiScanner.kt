@@ -35,98 +35,127 @@ class WifiScanner @Inject constructor(
         val rssi: Int?
     )
 
-    suspend fun scan(): WifiScanResult = withContext(Dispatchers.IO) {
-        DebugLog.i(TAG, "Starting Wi-Fi scan…")
+    private var activeScanJob: kotlinx.coroutines.Job? = null
+    private val activeListeners = Collections.synchronizedList(mutableListOf<android.net.nsd.NsdManager.DiscoveryListener>())
 
-        if (!wifiManager.isWifiEnabled) {
-            DebugLog.w(TAG, "Wi-Fi is DISABLED, aborting scan")
-            return@withContext WifiScanResult(emptyList(), false)
-        }
+    suspend fun scan(): WifiScanResult {
+        // Cancel any previous scan
+        cancelScan()
 
-        val devices = Collections.synchronizedList(mutableListOf<WifiDevice>())
-        @Suppress("DEPRECATION")
-        val connectionInfo = wifiManager.connectionInfo
-        @Suppress("DEPRECATION")
-        val ipAddress = connectionInfo.ipAddress
-        
-        if (ipAddress == 0) {
-            DebugLog.w(TAG, "IP address is 0 — not connected to any network")
-            return@withContext WifiScanResult(emptyList(), false)
-        }
+        return withContext(Dispatchers.IO) {
+            activeScanJob = coroutineContext[kotlinx.coroutines.Job]
 
-        val subnet = try {
-            val bytes = java.nio.ByteBuffer.allocate(4)
-                .order(java.nio.ByteOrder.LITTLE_ENDIAN)
-                .putInt(ipAddress)
-                .array()
-            val addr = InetAddress.getByAddress(bytes)
-            val host = addr.hostAddress ?: throw Exception("Invalid IP")
-            val s = host.substringBeforeLast(".") + "."
-            DebugLog.i(TAG, "Local IP: $host | Subnet: ${s}0/24")
-            s
-        } catch (e: Exception) {
-            DebugLog.e(TAG, "Failed to compute subnet: ${e.message}")
-            return@withContext WifiScanResult(emptyList(), false)
-        }
+            DebugLog.i(TAG, "Starting Wi-Fi scan…")
 
-        val discoveredIps = Collections.synchronizedSet(mutableSetOf<String>())
-
-        supervisorScope {
-            // Phase 1: SSDP/UPnP Discovery (great for cameras, smart TVs, routers)
-            val ssdpJob = launch {
-                try {
-                    DebugLog.i(TAG, "Starting SSDP/UPnP discovery…")
-                    discoverSsdp(discoveredIps, devices)
-                } catch (e: Exception) {
-                    DebugLog.e(TAG, "SSDP failure: ${e.message}")
-                }
+            if (!wifiManager.isWifiEnabled) {
+                DebugLog.w(TAG, "Wi-Fi is DISABLED, aborting scan")
+                return@withContext WifiScanResult(emptyList(), false)
             }
 
-            // Phase 2: mDNS Service Discovery (reliable for Apple/Google/printers)
-            val nsdManager = context.getSystemService(Context.NSD_SERVICE) as android.net.nsd.NsdManager
-            val mDnsJob = launch {
-                try {
-                    DebugLog.i(TAG, "Starting mDNS discovery…")
-                    discoverMdns(nsdManager, discoveredIps, devices)
-                } catch (e: Exception) {
-                    DebugLog.e(TAG, "mDNS failure: ${e.message}")
-                }
+            val devices = Collections.synchronizedList(mutableListOf<WifiDevice>())
+            @Suppress("DEPRECATION")
+            val connectionInfo = wifiManager.connectionInfo
+            @Suppress("DEPRECATION")
+            val ipAddress = connectionInfo.ipAddress
+
+            if (ipAddress == 0) {
+                DebugLog.w(TAG, "IP address is 0 — not connected to any network")
+                return@withContext WifiScanResult(emptyList(), false)
             }
 
-            // Phase 3: Active Ping-Sweep + Multi-Port Scan
-            DebugLog.i(TAG, "Starting ping sweep + port scan on ${subnet}1-254…")
-            val sweepJobs = (1..254).map { i ->
-                val lastByte = (ipAddress shr 24) and 0xFF
-                if (i == lastByte) return@map null
-                async {
-                    val testIp = subnet + i
-                    if (discoveredIps.contains(testIp)) return@async
-                    
+            val subnet = try {
+                val bytes = java.nio.ByteBuffer.allocate(4)
+                    .order(java.nio.ByteOrder.LITTLE_ENDIAN)
+                    .putInt(ipAddress)
+                    .array()
+                val addr = InetAddress.getByAddress(bytes)
+                val host = addr.hostAddress ?: throw Exception("Invalid IP")
+                val s = host.substringBeforeLast(".") + "."
+                DebugLog.i(TAG, "Local IP: $host | Subnet: ${s}0/24")
+                s
+            } catch (e: Exception) {
+                DebugLog.e(TAG, "Failed to compute subnet: ${e.message}")
+                return@withContext WifiScanResult(emptyList(), false)
+            }
+
+            val discoveredIps = Collections.synchronizedSet(mutableSetOf<String>())
+
+            supervisorScope {
+                // Phase 1: SSDP/UPnP Discovery (great for cameras, smart TVs, routers)
+                val ssdpJob = launch {
                     try {
-                        val address = InetAddress.getByName(testIp)
-                        val isReachable = address.isReachable(1200) || tryConnect(testIp)
-                        
-                        if (isReachable) {
-                            val hostname = try { address.hostName.takeIf { it != testIp } } catch(e: Exception) { null }
-                            if (discoveredIps.add(testIp)) {
-                                devices.add(WifiDevice(testIp, null, hostname, "Unknown", null))
-                                DebugLog.i(TAG, "Ping/port found: $testIp (hostname: ${hostname ?: "none"})")
-                            }
+                        DebugLog.i(TAG, "Starting SSDP/UPnP discovery…")
+                        discoverSsdp(discoveredIps, devices)
+                    } catch (e: Exception) {
+                        if (e !is kotlinx.coroutines.CancellationException) {
+                            DebugLog.e(TAG, "SSDP failure: ${e.message}")
                         }
-                    } catch (_: Exception) { }
+                    }
                 }
-            }.filterNotNull()
 
-            sweepJobs.awaitAll()
-            
-            // Wait for mDNS and SSDP to gather results
-            delay(4000)
-            mDnsJob.cancelAndJoin()
-            ssdpJob.cancelAndJoin()
+                // Phase 2: mDNS Service Discovery (reliable for Apple/Google/printers)
+                val nsdManager = context.getSystemService(Context.NSD_SERVICE) as android.net.nsd.NsdManager
+                val mDnsJob = launch {
+                    try {
+                        DebugLog.i(TAG, "Starting mDNS discovery…")
+                        discoverMdns(nsdManager, discoveredIps, devices)
+                    } catch (e: Exception) {
+                        if (e !is kotlinx.coroutines.CancellationException) {
+                            DebugLog.e(TAG, "mDNS failure: ${e.message}")
+                        }
+                    }
+                }
+
+                // Phase 3: Active Ping-Sweep + Multi-Port Scan
+                DebugLog.i(TAG, "Starting ping sweep + port scan on ${subnet}1-254…")
+                val sweepJobs = (1..254).map { i ->
+                    val lastByte = (ipAddress shr 24) and 0xFF
+                    if (i == lastByte) return@map null
+                    async {
+                        val testIp = subnet + i
+                        if (discoveredIps.contains(testIp)) return@async
+
+                        try {
+                            val address = InetAddress.getByName(testIp)
+                            val isReachable = address.isReachable(1200) || tryConnect(testIp)
+
+                            if (isReachable) {
+                                val hostname = try { address.hostName.takeIf { it != testIp } } catch(e: Exception) { null }
+                                if (discoveredIps.add(testIp)) {
+                                    devices.add(WifiDevice(testIp, null, hostname, "Unknown", null))
+                                    DebugLog.i(TAG, "Ping/port found: $testIp (hostname: ${hostname ?: "none"})")
+                                }
+                            }
+                        } catch (_: Exception) { }
+                    }
+                }.filterNotNull()
+
+                sweepJobs.awaitAll()
+
+                // Wait for mDNS and SSDP to gather results
+                delay(4000)
+                mDnsJob.cancelAndJoin()
+                ssdpJob.cancelAndJoin()
+            }
+
+            DebugLog.i(TAG, "Wi-Fi scan complete → ${devices.size} device(s) found")
+            WifiScanResult(devices.toList(), true)
         }
+    }
 
-        DebugLog.i(TAG, "Wi-Fi scan complete → ${devices.size} device(s) found")
-        WifiScanResult(devices.toList(), true)
+    fun cancelScan() {
+        DebugLog.i(TAG, "Cancelling Wi-Fi scan…")
+        activeScanJob?.cancel()
+        activeScanJob = null
+
+        // Clean up any lingering mDNS listeners
+        val nsdManager = context.getSystemService(Context.NSD_SERVICE) as? android.net.nsd.NsdManager
+        activeListeners.toList().forEach { listener ->
+            try {
+                nsdManager?.stopServiceDiscovery(listener)
+            } catch (_: Exception) { }
+        }
+        activeListeners.clear()
     }
 
     /**
@@ -240,7 +269,7 @@ class WifiScanner @Inject constructor(
             "_dvr._tcp",     // Digital Video Recorders
             "_onvif._tcp"    // ONVIF cameras
         )
-        
+
         val listeners = serviceTypes.map { type ->
             val listener = object : android.net.nsd.NsdManager.DiscoveryListener {
                 override fun onDiscoveryStarted(regType: String) {
@@ -292,9 +321,10 @@ class WifiScanner @Inject constructor(
                 }
                 override fun onStopDiscoveryFailed(regType: String, errorCode: Int) {}
             }
-            
+
             try {
                 nsdManager.discoverServices(type, android.net.nsd.NsdManager.PROTOCOL_DNS_SD, listener)
+                activeListeners.add(listener)
                 listener
             } catch (e: Exception) {
                 DebugLog.e(TAG, "Failed to start mDNS for $type: ${e.message}")
@@ -308,6 +338,7 @@ class WifiScanner @Inject constructor(
             listeners.forEach { listener ->
                 try {
                     nsdManager.stopServiceDiscovery(listener)
+                    activeListeners.remove(listener)
                 } catch (_: Exception) { }
             }
         }

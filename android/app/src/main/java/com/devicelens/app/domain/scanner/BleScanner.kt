@@ -9,6 +9,8 @@ import com.devicelens.app.domain.classification.OuiLookup
 import com.devicelens.app.helpers.DebugLog
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import kotlin.coroutines.resume
@@ -55,65 +57,70 @@ class BleScanner @Inject constructor(
         DebugLog.i(TAG, "BLE adapter enabled, scanner obtained, starting LE scan…")
         val results = ConcurrentHashMap<String, BleDevice>()
 
-        return suspendCancellableCoroutine { continuation ->
-            val settings = ScanSettings.Builder()
-                .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
-                .build()
+        return withTimeoutOrNull(durationMs + 1000) {
+            suspendCancellableCoroutine { continuation ->
+                val settings = ScanSettings.Builder()
+                    .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+                    .build()
 
-            val callback = object : ScanCallback() {
-                override fun onScanResult(callbackType: Int, result: ScanResult) {
-                    val device = result.device
-                    val name = try {
-                        device.name ?: result.scanRecord?.deviceName
-                    } catch (e: SecurityException) {
-                        null
+                val callback = object : ScanCallback() {
+                    override fun onScanResult(callbackType: Int, result: ScanResult) {
+                        val device = result.device
+                        val name = try {
+                            device.name ?: result.scanRecord?.deviceName
+                        } catch (e: SecurityException) {
+                            null
+                        }
+                        val address = device.address
+                        val vendor = ouiLookup.lookup(address)
+                        val isNew = !results.containsKey(address)
+                        results[address] = BleDevice(
+                            address = address,
+                            name = name,
+                            rssi = result.rssi,
+                            vendor = vendor
+                        )
+                        if (isNew) {
+                            DebugLog.i(TAG, "BLE device: $address name=${name ?: "n/a"} rssi=${result.rssi} vendor=$vendor")
+                        }
                     }
-                    val address = device.address
-                    val vendor = ouiLookup.lookup(address)
-                    val isNew = !results.containsKey(address)
-                    results[address] = BleDevice(
-                        address = address,
-                        name = name,
-                        rssi = result.rssi,
-                        vendor = vendor
-                    )
-                    if (isNew) {
-                        DebugLog.i(TAG, "BLE device: $address name=${name ?: "n/a"} rssi=${result.rssi} vendor=$vendor")
+
+                    override fun onScanFailed(errorCode: Int) {
+                        DebugLog.e(TAG, "BLE onScanFailed errorCode=$errorCode")
+                        if (continuation.isActive)
+                            continuation.resume(BleScanResult(emptyList(), false))
                     }
                 }
 
-                override fun onScanFailed(errorCode: Int) {
-                    DebugLog.e(TAG, "BLE onScanFailed errorCode=$errorCode")
-                    if (continuation.isActive)
-                        continuation.resume(BleScanResult(emptyList(), false))
+                try {
+                    scanner.startScan(null, settings, callback)
+                    DebugLog.i(TAG, "BLE startScan() called successfully")
+                } catch (e: SecurityException) {
+                    DebugLog.e(TAG, "SecurityException on startScan: ${e.message}")
+                    continuation.resume(BleScanResult(emptyList(), false))
+                    return@suspendCancellableCoroutine
+                }
+
+                // Schedule stop after duration
+                val stopJob = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                    delay(durationMs)
+                    try {
+                        scanner.stopScan(callback)
+                    } catch (e: SecurityException) { /* ignore */ }
+                    if (continuation.isActive) {
+                        DebugLog.i(TAG, "BLE scan complete → ${results.size} device(s) found")
+                        continuation.resume(BleScanResult(results.values.toList(), true))
+                    }
+                }
+
+                continuation.invokeOnCancellation {
+                    stopJob.cancel()
+                    try {
+                        scanner.stopScan(callback)
+                    } catch (e: SecurityException) { /* ignore */ }
+                    DebugLog.w(TAG, "BLE scan cancelled")
                 }
             }
-
-            try {
-                scanner.startScan(null, settings, callback)
-                DebugLog.i(TAG, "BLE startScan() called successfully")
-            } catch (e: SecurityException) {
-                DebugLog.e(TAG, "SecurityException on startScan: ${e.message}")
-                continuation.resume(BleScanResult(emptyList(), false))
-                return@suspendCancellableCoroutine
-            }
-
-            CoroutineScope(Dispatchers.IO).launch {
-                delay(durationMs)
-                try {
-                    scanner.stopScan(callback)
-                } catch (e: SecurityException) { /* ignore */ }
-                DebugLog.i(TAG, "BLE scan complete → ${results.size} device(s) found")
-                if (continuation.isActive)
-                    continuation.resume(BleScanResult(results.values.toList(), true))
-            }
-
-            continuation.invokeOnCancellation {
-                try {
-                    scanner.stopScan(callback)
-                } catch (e: SecurityException) { /* ignore */ }
-                DebugLog.w(TAG, "BLE scan cancelled")
-            }
-        }
+        } ?: BleScanResult(emptyList(), false)
     }
 }

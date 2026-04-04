@@ -8,7 +8,10 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -17,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -46,9 +50,7 @@ fun DeviceRow(
         else -> device.detectionMethod
     }
 
-    val typeBadge = device.deviceType.takeIf {
-        it.isNotBlank() && it != "Unknown"
-    }
+    val typeIcon = getDeviceTypeIcon(device.deviceType)
 
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
@@ -109,26 +111,33 @@ fun DeviceRow(
                     )
                     Spacer(modifier = Modifier.height(3.dp))
 
-                    // Row 2: Type badge + detection method + vendor
+                    // Row 2: Type icon + detection method + vendor
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        if (typeBadge != null) {
+                        // Device type icon indicator (replaces text badge)
+                        if (typeIcon != null) {
                             Surface(
-                                shape = RoundedCornerShape(4.dp),
-                                color = if (isSuspicious) RiskRed.copy(alpha = 0.12f)
-                                        else MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                                shape = CircleShape,
+                                color = if (isSuspicious) RiskRed.copy(alpha = 0.15f)
+                                        else MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                modifier = Modifier.size(24.dp)
                             ) {
-                                Text(
-                                    text = typeBadge,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (isSuspicious) RiskRed else MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
+                                Box(
+                                    contentAlignment = Alignment.Center,
+                                    modifier = Modifier.fillMaxSize()
+                                ) {
+                                    Icon(
+                                        imageVector = typeIcon,
+                                        contentDescription = device.deviceType,
+                                        tint = if (isSuspicious) RiskRed else MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
                             }
                         }
+                        // Detection method chip
                         Surface(
                             shape = RoundedCornerShape(4.dp),
                             color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f)
@@ -184,5 +193,64 @@ fun DeviceRow(
                 }
             }
         }
+    }
+}
+
+private fun getDeviceTypeIcon(deviceType: String?): ImageVector? {
+    if (deviceType.isNullOrBlank() || deviceType == "Unknown") return null
+
+    val type = deviceType.lowercase()
+    return when {
+        // Camera devices
+        "camera" in type || "dvr" in type || "nvr" in type || "surveillance" in type ->
+            Icons.Rounded.Videocam
+
+        // Router/Network
+        "router" in type || "gateway" in type || "modem" in type ->
+            Icons.Rounded.Router
+
+        // Media/TV
+        "tv" in type || "media" in type || "chromecast" in type || "roku" in type ||
+        "fire tv" in type || "apple tv" in type || "bravia" in type ->
+            Icons.Rounded.Tv
+
+        // Speaker/Audio
+        "speaker" in type || "audio" in type || "sonos" in type || "echo" in type ||
+        "homepod" in type || "airpods" in type ->
+            Icons.Rounded.Speaker
+
+        // Computer
+        "computer" in type || "laptop" in type || "desktop" in type || "pc" in type ||
+        "macbook" in type || "imac" in type || "server" in type ->
+            Icons.Rounded.Computer
+
+        // Phone/Mobile
+        "phone" in type || "mobile" in type || "iphone" in type || "pixel" in type ||
+        "galaxy" in type || "android" in type ->
+            Icons.Rounded.Smartphone
+
+        // Wearable
+        "watch" in type || "wearable" in type || "fitbit" in type || "band" in type ->
+            Icons.Rounded.Watch
+
+        // Printer
+        "printer" in type ->
+            Icons.Rounded.Print
+
+        // NAS/Storage
+        "nas" in type || "file server" in type || "storage" in type ->
+            Icons.Rounded.Storage
+
+        // IoT/Smart Home
+        "iot" in type || "smart" in type || "sensor" in type || "thermostat" in type ||
+        "nest" in type || "ring" in type || "hue" in type || "plug" in type ->
+            Icons.Rounded.SmartToy
+
+        // Cloud/Network Service
+        "cloud" in type || "network" in type ->
+            Icons.Rounded.Cloud
+
+        // Default for unknown
+        else -> Icons.Rounded.Devices
     }
 }

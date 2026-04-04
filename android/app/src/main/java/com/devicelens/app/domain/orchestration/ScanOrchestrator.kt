@@ -35,24 +35,32 @@ class ScanOrchestrator @Inject constructor(
     private val _scanPhase = MutableStateFlow("")
     val scanPhase: StateFlow<String> = _scanPhase
 
+    private var currentScanJob: kotlinx.coroutines.Job? = null
+
     suspend fun runScan(): ScanResult {
+        // Cancel any existing scan first
+        currentScanJob?.cancel()
+        currentScanJob = kotlinx.coroutines.coroutineContext[kotlinx.coroutines.Job]
+
         DebugLog.i(TAG, "=== SCAN STARTED ===")
 
         // Phase 1: Discover
         val (wifi, ble, mag) = supervisorScope {
-            _scanPhase.value = "Scanning Wi-Fi network…"
+            _scanPhase.value = "Discovering Wi-Fi devices…"
             val wifiDeferred = async(Dispatchers.IO) {
                 try { wifiScanner.scan() }
                 catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
                     DebugLog.e(TAG, "Wi-Fi scanner crashed: ${e.message}")
                     WifiScanner.WifiScanResult(emptyList(), false)
                 }
             }
 
-            _scanPhase.value = "Looking for Bluetooth devices…"
+            _scanPhase.value = "Scanning Bluetooth signals…"
             val bleDeferred = async(Dispatchers.IO) {
                 try { bleScanner.scan(durationMs = 8000) }
                 catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
                     DebugLog.e(TAG, "BLE scanner crashed: ${e.message}")
                     BleScanner.BleScanResult(emptyList(), false)
                 }
@@ -62,6 +70,7 @@ class ScanOrchestrator @Inject constructor(
             val magDeferred = async(Dispatchers.IO) {
                 try { magnetometerMonitor.sample(durationMs = 3000) }
                 catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
                     DebugLog.e(TAG, "Magnetometer crashed: ${e.message}")
                     MagnetometerMonitor.MagnetometerReading(0f, 0f, false)
                 }

@@ -109,12 +109,20 @@ class StatusViewModel @Inject constructor(
     }
 
     fun restartScan() {
+        // Ensure any existing scan is fully cleaned up before starting new one
+        scanJob?.cancel()
         checkHardwareStatus()
-        startScan()
+        // Small delay to ensure cleanup completes
+        viewModelScope.launch {
+            kotlinx.coroutines.delay(100)
+            startScan()
+        }
     }
 
     fun startScan() {
+        // Cancel existing scan first and wait briefly
         scanJob?.cancel()
+
         val myGeneration = ++scanGeneration
         DebugLog.i(TAG, "startScan() gen=$myGeneration")
 
