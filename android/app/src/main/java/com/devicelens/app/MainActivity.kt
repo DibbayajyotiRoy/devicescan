@@ -9,13 +9,18 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.*
 import androidx.core.content.ContextCompat
+import com.devicelens.app.data.remote.BackendClient
 import com.devicelens.app.ui.navigation.DeviceLensNavHost
 import com.devicelens.app.ui.theme.DeviceLensTheme
+import javax.inject.Inject
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
+    @Inject lateinit var backendClient: BackendClient
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -32,7 +37,12 @@ class MainActivity : ComponentActivity() {
         checkAndRequestPermissions()
         setContent {
             DeviceLensTheme {
-                DeviceLensNavHost()
+                var isLoggedIn by remember { mutableStateOf(backendClient.isLoggedIn()) }
+                
+                DeviceLensNavHost(
+                    isLoggedIn = isLoggedIn,
+                    onLoginSuccess = { isLoggedIn = true }
+                )
             }
         }
     }

@@ -5,6 +5,15 @@ plugins {
     kotlin("kapt")
 }
 
+import java.util.Properties
+import java.io.FileInputStream
+
+val envFile = project.file("frontend.env")
+val env = Properties()
+if (envFile.exists()) {
+    env.load(FileInputStream(envFile))
+}
+
 android {
     namespace = "com.devicelens.app"
     compileSdk = 34
@@ -16,17 +25,20 @@ android {
         versionCode = 1
         versionName = "1.0.0"
 
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        val backendUrl = env.getProperty("BACKEND_API_URL") ?: "https://devicescan.onrender.com"
+        val googleClientId = env.getProperty("GOOGLE_CLIENT_ID") ?: ""
 
+        buildConfigField("String", "BACKEND_API_URL", "\"$backendUrl\"")
+        buildConfigField("String", "GOOGLE_CLIENT_ID", "\"$googleClientId\"")
+
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        
         vectorDrawables {
             useSupportLibrary = true
         }
     }
 
     buildTypes {
-        debug {
-            buildConfigField("String", "BACKEND_API_URL", "\"https://devicescan.onrender.com\"")
-        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
@@ -34,7 +46,6 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            buildConfigField("String", "BACKEND_API_URL", "\"https://devicescan.onrender.com\"")
         }
     }
 
@@ -73,6 +84,9 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.activity:activity-compose:1.9.0")
     debugImplementation("androidx.compose.ui:ui-tooling")
+
+    // Google Auth
+    implementation("com.google.android.gms:play-services-auth:21.1.1")
 
     // Navigation
     implementation("androidx.navigation:navigation-compose:2.7.7")

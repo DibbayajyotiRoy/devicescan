@@ -37,79 +37,17 @@ class DeviceFingerprinter @Inject constructor() {
         val respondsTutk: Boolean = false
     )
 
-    // ─── ARP / Neighbor Cache ───────────────────────────────────────
-
-    fun readArpTable(): Map<String, String> {
-        val map = mutableMapOf<String, String>()
-        val macRegex = Regex("([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}")
-
-        // Try ip neigh → /proc/net/arp → shell cat
-        for (method in listOf(::readViaIpNeigh, ::readViaProcArp, ::readViaShellArp)) {
-            method(map, macRegex)
-            if (map.isNotEmpty()) {
-                DebugLog.i(TAG, "ARP resolved ${map.size} MAC addresses")
-                return map
-            }
-        }
-        DebugLog.w(TAG, "All ARP methods failed — 0 MACs resolved")
-        return map
-    }
-
-    private fun readViaIpNeigh(map: MutableMap<String, String>, macRegex: Regex) {
-        try {
-            val process = Runtime.getRuntime().exec(arrayOf("ip", "neigh", "show"))
-            val output = process.inputStream.bufferedReader().readText()
-            process.waitFor()
-            for (line in output.lines()) {
-                val parts = line.trim().split("\\s+".toRegex())
-                if (parts.size >= 5) {
-                    val macMatch = macRegex.find(line)
-                    if (macMatch != null) {
-                        val mac = macMatch.value.uppercase()
-                        if (mac != "00:00:00:00:00:00") map[parts[0]] = mac
-                    }
-                }
-            }
-        } catch (_: Exception) {}
-    }
-
-    private fun readViaProcArp(map: MutableMap<String, String>, @Suppress("UNUSED_PARAMETER") macRegex: Regex) {
-        try {
-            for (line in java.io.File("/proc/net/arp").readLines().drop(1)) {
-                val parts = line.trim().split("\\s+".toRegex())
-                if (parts.size >= 4) {
-                    val mac = parts[3].uppercase()
-                    if (mac != "00:00:00:00:00:00") map[parts[0]] = mac
-                }
-            }
-        } catch (_: Exception) {}
-    }
-
-    private fun readViaShellArp(map: MutableMap<String, String>, @Suppress("UNUSED_PARAMETER") macRegex: Regex) {
-        try {
-            val process = Runtime.getRuntime().exec(arrayOf("sh", "-c", "cat /proc/net/arp"))
-            val output = process.inputStream.bufferedReader().readText()
-            process.waitFor()
-            for (line in output.lines().drop(1)) {
-                val parts = line.trim().split("\\s+".toRegex())
-                if (parts.size >= 4) {
-                    val mac = parts[3].uppercase()
-                    if (mac != "00:00:00:00:00:00") map[parts[0]] = mac
-                }
-            }
-        } catch (_: Exception) {}
-    }
-
     // ─── Batch Fingerprinting ───────────────────────────────────────
 
     suspend fun fingerprintAll(
         ips: List<String>,
-        arpTable: Map<String, String>
+        arpTable: Map<String, String>,
+        gatewayIp: String? = null
     ): Map<String, Fingerprint> = supervisorScope {
         ips.map { ip ->
             async(Dispatchers.IO) {
                 try {
-                    ip to fingerprint(ip, arpTable[ip])
+                    ip to fingerprint(ip, arpTable[ip], isGateway = ip == gatewayIp)
                 } catch (e: Exception) {
                     DebugLog.w(TAG, "$ip error: ${e.message}")
                     ip to Fingerprint(arpTable[ip], null, null, emptyList(), "Unknown", null, emptyList(), false, false, false)
@@ -120,7 +58,7 @@ class DeviceFingerprinter @Inject constructor() {
 
     // ─── Per-Device Fingerprint ─────────────────────────────────────
 
-    private fun fingerprint(ip: String, mac: String?): Fingerprint {
+    private fun fingerprint(ip: String, mac: String?, isGateway: Boolean = false): Fingerprint {
         val signals = mutableListOf<String>()
         var httpServer: String? = null
         var pageTitle: String? = null
@@ -182,7 +120,7 @@ class DeviceFingerprinter @Inject constructor() {
         }
 
         // 7. Classify purely from signals
-        val deviceType = classifyFromSignals(openPorts, httpServer, pageTitle, signals)
+        val deviceType = classifyFromSignals(openPorts, httpServer, pageTitle, signals, isGateway)
         val friendlyName = pickBestName(httpServer, pageTitle)
 
         if (deviceType != "Unknown") {
@@ -222,7 +160,7 @@ class DeviceFingerprinter @Inject constructor() {
         )
         for (port in ports) {
             try {
-                Socket().apply { connect(InetSocketAddress(ip, port), 400); close() }
+                Socket().apply { connect(InetSocketAddress(ip, port), 200); close() }
                 open.add(port)
             } catch (_: Exception) {}
         }
@@ -233,7 +171,7 @@ class DeviceFingerprinter @Inject constructor() {
 
     private fun probeUdp54321(ip: String): Boolean {
         return try {
-            val socket = DatagramSocket().apply { soTimeout = 1500 }
+            val socket = DatagramSocket().apply { soTimeout = 800 }
             val hello = ByteArray(32).apply {
                 this[0] = 0x21; this[1] = 0x31
                 this[2] = 0x00; this[3] = 0x20
@@ -262,7 +200,7 @@ class DeviceFingerprinter @Inject constructor() {
             try {
                 val scheme = if (port in listOf(443, 8443)) "https" else "http"
                 val conn = URL("$scheme://$ip:$port/").openConnection() as HttpURLConnection
-                conn.connectTimeout = 2500; conn.readTimeout = 2500
+                conn.connectTimeout = 1500; conn.readTimeout = 1500
                 conn.instanceFollowRedirects = true
                 conn.setRequestProperty("User-Agent", "Mozilla/5.0")
                 try {
@@ -301,7 +239,7 @@ class DeviceFingerprinter @Inject constructor() {
         for (path in paths) {
             try {
                 val conn = URL("http://$ip:$httpPort$path").openConnection() as HttpURLConnection
-                conn.connectTimeout = 1500; conn.readTimeout = 1500
+                conn.connectTimeout = 800; conn.readTimeout = 800
                 conn.instanceFollowRedirects = false
                 conn.setRequestProperty("User-Agent", "Mozilla/5.0")
                 try {
@@ -324,7 +262,7 @@ class DeviceFingerprinter @Inject constructor() {
                   <soap:Body><tds:GetDeviceInformation/></soap:Body>
                 </soap:Envelope>""".trimIndent()
             val conn = URL("http://$ip:$port/onvif/device_service").openConnection() as HttpURLConnection
-            conn.requestMethod = "POST"; conn.connectTimeout = 2000; conn.readTimeout = 2000
+            conn.requestMethod = "POST"; conn.connectTimeout = 1000; conn.readTimeout = 1000
             conn.setRequestProperty("Content-Type", "application/soap+xml"); conn.doOutput = true
             conn.outputStream.write(soap.toByteArray())
             val code = conn.responseCode; conn.disconnect()
@@ -337,7 +275,7 @@ class DeviceFingerprinter @Inject constructor() {
     /** Tuya local control protocol — UDP 6666 */
     private fun probeTuyaUdp(ip: String): Boolean {
         return try {
-            val socket = DatagramSocket().apply { soTimeout = 1200 }
+            val socket = DatagramSocket().apply { soTimeout = 800 }
             // Tuya protocol version 3.1/3.3 discovery packet
             val probe = byteArrayOf(
                 0x00, 0x00, 0x55, 0xAA.toByte(),  // Tuya prefix
@@ -356,7 +294,7 @@ class DeviceFingerprinter @Inject constructor() {
     /** XMEye / Xiongmai DVR protocol — UDP 34567 */
     private fun probeXmeyeUdp(ip: String): Boolean {
         return try {
-            val socket = DatagramSocket().apply { soTimeout = 1200 }
+            val socket = DatagramSocket().apply { soTimeout = 800 }
             // XMEye "search" command
             val probe = byteArrayOf(
                 0xFF.toByte(), 0x00, 0x00, 0x00,
@@ -375,7 +313,7 @@ class DeviceFingerprinter @Inject constructor() {
     /** TUTK P2P camera protocol — UDP 32100 */
     private fun probeTutkP2p(ip: String): Boolean {
         return try {
-            val socket = DatagramSocket().apply { soTimeout = 1200 }
+            val socket = DatagramSocket().apply { soTimeout = 800 }
             // TUTK P2P LAN search hello packet
             val probe = byteArrayOf(
                 0xF1.toByte(), 0xD0.toByte(), 0x00, 0x02,
@@ -399,22 +337,30 @@ class DeviceFingerprinter @Inject constructor() {
         openPorts: List<Int>,
         server: String?,
         title: String?,
-        signals: List<String>
+        signals: List<String>,
+        isGateway: Boolean = false
     ): String {
         val s = (server ?: "").lowercase()
         val t = (title ?: "").lowercase()
         val signalText = signals.joinToString(" ").lowercase()
 
-        // ── Camera / Surveillance (strongest signals first) ──
+        // ── Router / Gateway (check FIRST to prevent false camera positives) ──
+        if (isGateway) return "🌐 Router/Gateway"
+        if (openPorts.containsAll(listOf(80, 23)) && openPorts.size <= 5) return "🌐 Router"
+        if (listOf("router", "gateway", "modem", "vxworks", "ac10", "ac15", "tenda", "netgear", "tp-link")
+                .any { it in "$s $t" }) return "🌐 Router"
+
+        // ── Camera / Surveillance (strongest protocol signals) ──
         if (signals.any { "xmeye" in it.lowercase() || "dvr protocol" in it.lowercase() }) return "🚨 Camera/DVR (XMEye)"
         if (signals.any { "tutk" in it.lowercase() }) return "🚨 Camera (P2P)"
         if (signals.any { "onvif" in it.lowercase() }) return "📹 Camera (ONVIF)"
-        if (signals.any { "camera endpoint" in it.lowercase() }) return "📹 Camera"
         if (openPorts.any { it in listOf(554, 8554) }) return "📹 Camera (RTSP)"
         if (openPorts.contains(34567)) return "🚨 Camera/DVR (XMEye port)"
         if (openPorts.contains(37777)) return "🚨 Camera/DVR (Dahua port)"
-        if (openPorts.contains(8000) && openPorts.contains(80)) return "📹 Camera (Hikvision port)"
+        if (openPorts.contains(8000) && openPorts.contains(80) && !isGateway) return "📹 Camera (Hikvision port)"
         if (openPorts.contains(9527)) return "📹 Camera (Chinese IP cam)"
+        // Camera endpoint — only if NOT a router (routers often have /snapshot.cgi)
+        if (signals.any { "camera endpoint" in it.lowercase() }) return "📹 Camera"
         if (listOf("camera", "ipcam", "dvr", "nvr", "surveillance", "live view", "snapshot", "recording")
                 .any { it in "$s $t" }) return "📹 Camera"
 
@@ -427,12 +373,8 @@ class DeviceFingerprinter @Inject constructor() {
         if (signals.any { "tuya" in it.lowercase() }) return "⚠️ IoT Device (Tuya)"
         if (openPorts.any { it in listOf(6666, 6667) }) return "⚠️ IoT Device (Tuya port)"
 
-        // ── IoT Smart Home ──
-        if ("udp 54321" in signalText) return "📡 Smart Home Device"
-
-        // ── Router / Gateway ──
-        if (openPorts.containsAll(listOf(80, 23)) && openPorts.size <= 5) return "🌐 Router"
-        if (listOf("router", "gateway", "modem").any { it in "$s $t" }) return "🌐 Router"
+        // ── Xiaomi / Mi Home IoT ──
+        if ("udp 54321" in signalText) return "📡 Xiaomi/Mi Home Device"
 
         // ── Smart TV / Media ──
         if (listOf("tv", "bravia", "chromecast", "cast", "roku", "apple tv", "fire tv", "airplay", "crystal uhd")
@@ -465,10 +407,18 @@ class DeviceFingerprinter @Inject constructor() {
         return "☁️ Mobile Device (limited visibility)"
     }
 
+    private val garbageNames = setOf(
+        "index", "document", "untitled", "opening...", "loading...", "loading",
+        "please wait", "redirect", "home", "welcome", "login", "null",
+        "nginx", "apache", "iis", "lighttpd"
+    )
+
     private fun pickBestName(server: String?, title: String?): String? {
-        if (!title.isNullOrBlank() && title.length > 2 && title.lowercase() !in listOf("index", "document", "untitled")
+        if (!title.isNullOrBlank() && title.length > 2
+            && title.lowercase() !in garbageNames
             && !title.startsWith("http")) return title.take(40)
-        if (!server.isNullOrBlank() && server.length > 2) return server.take(40)
+        if (!server.isNullOrBlank() && server.length > 2
+            && server.lowercase() !in garbageNames) return server.take(40)
         return null
     }
 }

@@ -1,17 +1,19 @@
 package com.devicelens.app.ui.components
 
-import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.indication
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.*
+import androidx.compose.material.icons.outlined.*
+import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.Wifi
+import androidx.compose.material.icons.outlined.Bluetooth
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -20,14 +22,21 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.devicelens.app.data.db.DeviceEntity
-import com.devicelens.app.ui.theme.RiskRed
-import com.devicelens.app.ui.theme.SafeGreen
-import com.devicelens.app.ui.theme.WarningAmber
+import com.devicelens.app.ui.theme.ExtendedTheme
+import com.devicelens.app.ui.theme.JetBrainsMonoFamily
+import com.devicelens.app.ui.theme.ShapeMedium
+
+// ═════════════════════════════════════════════════════════════════════════════
+// DEVICE ROW — DOUBLE-BEZEL NESTED ARCHITECTURE
+// Glass-morphic cards with haptic press feedback and risk indicators
+// ═════════════════════════════════════════════════════════════════════════════
 
 @Composable
 fun DeviceRow(
@@ -35,145 +44,144 @@ fun DeviceRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // Theme-aware status colors
     val riskColor = when (device.riskLevel) {
-        "SAFE" -> SafeGreen
-        "SUSPICIOUS" -> RiskRed
-        else -> WarningAmber
+        "SAFE" -> ExtendedTheme.colors.statusSafe
+        "SUSPICIOUS" -> ExtendedTheme.colors.statusRisk
+        else -> ExtendedTheme.colors.statusWarning
+    }
+
+    val riskGlowColor = when (device.riskLevel) {
+        "SAFE" -> ExtendedTheme.colors.statusSafeGlow
+        "SUSPICIOUS" -> ExtendedTheme.colors.statusRiskGlow
+        else -> ExtendedTheme.colors.statusWarningGlow
     }
 
     val isSuspicious = device.riskLevel == "SUSPICIOUS"
 
-    val detectionBadge = when (device.detectionMethod) {
-        "WIFI" -> "Wi-Fi"
-        "BLE" -> "Bluetooth"
-        "BOTH" -> "Wi-Fi + BT"
-        else -> device.detectionMethod
-    }
-
-    val typeIcon = getDeviceTypeIcon(device.deviceType)
-
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
-    val pressScale = if (isPressed) 0.97f else 1f
 
-    Surface(
+    val pressScale by animateFloatAsState(
+        targetValue = if (isPressed) 0.98f else 1f,
+        animationSpec = tween(100),
+        label = "pressScale"
+    )
+
+    // Outer shell — Double-bezel glass container with theme-aware accent
+    Box(
         modifier = modifier
             .fillMaxWidth()
             .scale(pressScale)
-            .animateContentSize(),
-        shape = RoundedCornerShape(14.dp),
-        color = if (isSuspicious)
-            RiskRed.copy(alpha = 0.06f)
-        else
-            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-        tonalElevation = 0.dp
-    ) {
-        Row(
-            modifier = Modifier
-                .clickable(
-                    interactionSource = interactionSource,
-                    indication = LocalIndication.current,
-                    onClick = onClick
-                )
-                .fillMaxWidth()
-        ) {
-            // Left risk accent bar
-            Box(
-                modifier = Modifier
-                    .width(3.dp)
-                    .fillMaxHeight()
-                    .background(riskColor)
+            .clip(ShapeMedium)
+            .background(
+                if (isSuspicious) {
+                    riskColor.copy(alpha = 0.2f)
+                } else {
+                    ExtendedTheme.colors.hairlineBorder
+                }
             )
-
+            .padding(1.dp)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            )
+    ) {
+        // Inner core — glass-morphic content container
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(19.dp))
+                .background(
+                    brush = Brush.linearGradient(
+                        colors = listOf(
+                            if (isSuspicious) riskGlowColor.copy(alpha = 0.3f)
+                            else ExtendedTheme.colors.surfaceGlass,
+                            if (isSuspicious) riskGlowColor.copy(alpha = 0.1f)
+                            else ExtendedTheme.colors.surfaceGlassHighlight.copy(alpha = 0.5f)
+                        )
+                    )
+                )
+                .padding(16.dp)
+        ) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 14.dp),
-                verticalAlignment = Alignment.CenterVertically
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                // Device icon
                 DeviceTypeIcon(
                     deviceName = device.deviceName,
                     vendor = device.vendor,
-                    modifier = Modifier.size(40.dp)
+                    deviceType = device.deviceType,
+                    modifier = Modifier.size(48.dp),
+                    isSuspicious = isSuspicious
                 )
 
-                Spacer(modifier = Modifier.width(14.dp))
-
-                Column(modifier = Modifier.weight(1f)) {
-                    // Row 1: Device name
-                    Text(
-                        text = device.deviceName,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        color = if (isSuspicious) RiskRed else MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(modifier = Modifier.height(3.dp))
-
-                    // Row 2: Type icon + detection method + vendor
+                // Content column
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    // Row 1: Device name + risk badge if suspicious
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        // Device type icon indicator (replaces text badge)
-                        if (typeIcon != null) {
-                            Surface(
-                                shape = CircleShape,
-                                color = if (isSuspicious) RiskRed.copy(alpha = 0.15f)
-                                        else MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                                modifier = Modifier.size(24.dp)
-                            ) {
-                                Box(
-                                    contentAlignment = Alignment.Center,
-                                    modifier = Modifier.fillMaxSize()
-                                ) {
-                                    Icon(
-                                        imageVector = typeIcon,
-                                        contentDescription = device.deviceType,
-                                        tint = if (isSuspicious) RiskRed else MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                }
-                            }
+                        Text(
+                            text = device.deviceName,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            color = if (isSuspicious) ExtendedTheme.colors.statusRisk
+                            else MaterialTheme.colorScheme.onSurface
+                        )
+
+                        // Risk badge for suspicious devices
+                        if (isSuspicious) {
+                            RiskBadge()
                         }
-                        // Detection method chip
-                        Surface(
-                            shape = RoundedCornerShape(4.dp),
-                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f)
-                        ) {
-                            Text(
-                                text = detectionBadge,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
-                        }
+                    }
+
+                    // Row 2: Detection method + vendor
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // Detection method pill
+                        DetectionPill(
+                            method = device.detectionMethod,
+                            isSuspicious = isSuspicious
+                        )
+
+                        // Vendor chip
                         if (device.vendor != "Unknown") {
                             Text(
                                 text = device.vendor,
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                color = ExtendedTheme.colors.textTertiary,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
 
-                    // Row 3: IP + MAC
+                    // Row 3: Technical details (IP, MAC)
                     val subInfo = buildString {
                         device.ipAddress?.let { append(it) }
                         device.macAddress?.let {
                             if (isNotEmpty()) append(" · ")
-                            append(it)
+                            append(it.uppercase())
                         }
                     }
                     if (subInfo.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(2.dp))
                         Text(
                             text = subInfo,
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
+                            fontFamily = JetBrainsMonoFamily,
+                            color = ExtendedTheme.colors.textQuaternary,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -181,76 +189,115 @@ fun DeviceRow(
 
                     // Row 4: Open ports (if any)
                     if (device.openPorts.isNotBlank()) {
-                        Spacer(modifier = Modifier.height(2.dp))
                         Text(
                             text = "Ports: ${device.openPorts}",
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
+                            fontFamily = JetBrainsMonoFamily,
+                            color = ExtendedTheme.colors.textQuaternary.copy(alpha = 0.7f),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
+
+                // Trailing chevron
+                Icon(
+                    imageVector = Icons.Outlined.ChevronRight,
+                    contentDescription = null,
+                    tint = ExtendedTheme.colors.textQuaternary,
+                    modifier = Modifier.size(20.dp)
+                )
             }
         }
     }
 }
 
+@Composable
+private fun DetectionPill(
+    method: String,
+    isSuspicious: Boolean
+) {
+    val (icon, label) = when (method) {
+        "WIFI" -> Icons.Outlined.Wifi to "Wi-Fi"
+        "BLE" -> Icons.Outlined.Bluetooth to "Bluetooth"
+        "BOTH" -> Icons.Outlined.Wifi to "Dual"
+        else -> Icons.Outlined.Wifi to method
+    }
+
+    val riskColor = if (isSuspicious) ExtendedTheme.colors.statusRisk else ExtendedTheme.colors.textTertiary
+
+    val backgroundColor = if (isSuspicious) {
+        ExtendedTheme.colors.statusRiskGlow.copy(alpha = 0.4f)
+    } else {
+        ExtendedTheme.colors.surfaceGlassBorder.copy(alpha = 0.3f)
+    }
+
+    val contentColor = riskColor
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(backgroundColor)
+            .padding(horizontal = 8.dp, vertical = 4.dp)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = contentColor,
+            modifier = Modifier.size(12.dp)
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = contentColor
+        )
+    }
+}
+
+@Composable
+private fun RiskBadge() {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(ExtendedTheme.colors.statusRiskGlow.copy(alpha = 0.5f))
+            .padding(horizontal = 8.dp, vertical = 3.dp)
+    ) {
+        Text(
+            text = "SUSPICIOUS",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = ExtendedTheme.colors.statusRisk
+        )
+    }
+}
+
+// Keep reference to detectDeviceIcon for legacy compatibility
+@Deprecated("Use detectDeviceIcon from DeviceTypeIcon.kt instead")
 private fun getDeviceTypeIcon(deviceType: String?): ImageVector? {
     if (deviceType.isNullOrBlank() || deviceType == "Unknown") return null
 
     val type = deviceType.lowercase()
     return when {
-        // Camera devices
-        "camera" in type || "dvr" in type || "nvr" in type || "surveillance" in type ->
-            Icons.Rounded.Videocam
-
-        // Router/Network
-        "router" in type || "gateway" in type || "modem" in type ->
-            Icons.Rounded.Router
-
-        // Media/TV
-        "tv" in type || "media" in type || "chromecast" in type || "roku" in type ||
-        "fire tv" in type || "apple tv" in type || "bravia" in type ->
-            Icons.Rounded.Tv
-
-        // Speaker/Audio
-        "speaker" in type || "audio" in type || "sonos" in type || "echo" in type ||
-        "homepod" in type || "airpods" in type ->
-            Icons.Rounded.Speaker
-
-        // Computer
-        "computer" in type || "laptop" in type || "desktop" in type || "pc" in type ||
-        "macbook" in type || "imac" in type || "server" in type ->
-            Icons.Rounded.Computer
-
-        // Phone/Mobile
-        "phone" in type || "mobile" in type || "iphone" in type || "pixel" in type ||
-        "galaxy" in type || "android" in type ->
-            Icons.Rounded.Smartphone
-
-        // Wearable
-        "watch" in type || "wearable" in type || "fitbit" in type || "band" in type ->
-            Icons.Rounded.Watch
-
-        // Printer
-        "printer" in type ->
-            Icons.Rounded.Print
-
-        // NAS/Storage
-        "nas" in type || "file server" in type || "storage" in type ->
-            Icons.Rounded.Storage
-
-        // IoT/Smart Home
-        "iot" in type || "smart" in type || "sensor" in type || "thermostat" in type ||
-        "nest" in type || "ring" in type || "hue" in type || "plug" in type ->
-            Icons.Rounded.SmartToy
-
-        // Cloud/Network Service
-        "cloud" in type || "network" in type ->
-            Icons.Rounded.Cloud
-
-        // Default for unknown
-        else -> Icons.Rounded.Devices
+        type.contains("camera") || type.contains("dvr") || type.contains("nvr") ->
+            Icons.Outlined.Videocam
+        type.contains("router") || type.contains("gateway") || type.contains("modem") ->
+            Icons.Outlined.Router
+        type.contains("tv") || type.contains("media") || type.contains("chromecast") ->
+            Icons.Outlined.Tv
+        type.contains("speaker") || type.contains("audio") ->
+            Icons.Outlined.Speaker
+        type.contains("computer") || type.contains("laptop") || type.contains("desktop") ->
+            Icons.Outlined.Computer
+        type.contains("phone") || type.contains("mobile") ->
+            Icons.Outlined.Smartphone
+        type.contains("watch") || type.contains("wearable") ->
+            Icons.Outlined.Watch
+        type.contains("printer") ->
+            Icons.Outlined.Print
+        type.contains("nas") || type.contains("storage") ->
+            Icons.Outlined.Storage
+        else -> null
     }
 }

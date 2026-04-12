@@ -14,6 +14,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.devicelens.app.data.db.DeviceEntity
 import com.devicelens.app.data.repository.DeviceRepository
+import com.devicelens.app.data.remote.BackendClient
 import com.devicelens.app.domain.model.OverallStatus
 import com.devicelens.app.domain.orchestration.ScanOrchestrator
 import com.devicelens.app.helpers.DebugLog
@@ -32,7 +33,8 @@ private val NUDGE_SHOWN = booleanPreferencesKey("nudge_shown")
 class StatusViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val scanOrchestrator: ScanOrchestrator,
-    private val deviceRepository: DeviceRepository
+    private val deviceRepository: DeviceRepository,
+    private val backendClient: BackendClient
 ) : ViewModel() {
 
     private val TAG = "StatusVM"
@@ -109,18 +111,12 @@ class StatusViewModel @Inject constructor(
     }
 
     fun restartScan() {
-        // Ensure any existing scan is fully cleaned up before starting new one
-        scanJob?.cancel()
-        checkHardwareStatus()
-        // Small delay to ensure cleanup completes
-        viewModelScope.launch {
-            kotlinx.coroutines.delay(100)
-            startScan()
-        }
+        DebugLog.i(TAG, "restartScan() requested")
+        startScan()
     }
 
     fun startScan() {
-        // Cancel existing scan first and wait briefly
+        // Cancel existing scan job to trigger cleanup in orchestrator/scanners
         scanJob?.cancel()
 
         val myGeneration = ++scanGeneration
@@ -130,24 +126,23 @@ class StatusViewModel @Inject constructor(
             _isScanning.value = true
             _overallStatus.value = OverallStatus.SCANNING
             try {
+                // The orchestrator handles sequential access via Mutex
                 val result = scanOrchestrator.runScan()
-                // Only update state if we're still the active scan
+                
                 if (myGeneration == scanGeneration) {
                     _overallStatus.value = result.overallStatus
                     DebugLog.i(TAG, "Scan gen=$myGeneration finished: ${result.overallStatus}")
-                } else {
-                    DebugLog.w(TAG, "Scan gen=$myGeneration superseded by gen=$scanGeneration, discarding result")
                 }
-            } catch (e: kotlinx.coroutines.CancellationException) {
-                DebugLog.w(TAG, "Scan gen=$myGeneration cancelled")
-                throw e // re-throw so coroutine properly cancels
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) {
+                    DebugLog.w(TAG, "Scan gen=$myGeneration cancelled")
+                    throw e
+                }
                 DebugLog.e(TAG, "Scan gen=$myGeneration error: ${e.message}")
                 if (myGeneration == scanGeneration) {
                     _overallStatus.value = OverallStatus.NOT_CALIBRATED
                 }
             } finally {
-                // Only reset scanning flag if we're still the active scan
                 if (myGeneration == scanGeneration) {
                     _isScanning.value = false
                 }
@@ -178,6 +173,8 @@ class StatusViewModel @Inject constructor(
     fun getTopSuspiciousDevice(): DeviceEntity? =
         devices.value.firstOrNull { it.riskLevel == "SUSPICIOUS" }
 
+    fun getUserAvatar(): String? = backendClient.getUserAvatar()
+
     fun getCurrentSsid(): String {
         val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? android.net.wifi.WifiManager
         @Suppress("DEPRECATION")
@@ -196,7 +193,7 @@ class StatusViewModel @Inject constructor(
             context.checkSelfPermission(android.Manifest.permission.BLUETOOTH_SCAN) == android.content.pm.PackageManager.PERMISSION_GRANTED
         } else true
 
-        val btEnabled = if (hasPermission) bm.adapter?.isEnabled == true else true
+        val btEnabled = if (hasPermission) bm.adapter?.isEnabled == true else false
         _bluetoothEnabled.value = btEnabled
 
         DebugLog.i(TAG, "Hardware check: location=$locEnabled bluetooth=$btEnabled btPermission=$hasPermission")

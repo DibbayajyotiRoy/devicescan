@@ -14,9 +14,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.devicelens.app.ui.components.DeviceTypeIcon
-import com.devicelens.app.ui.theme.RiskRed
-import com.devicelens.app.ui.theme.SafeGreen
-import com.devicelens.app.ui.theme.WarningAmber
+import com.devicelens.app.ui.theme.ExtendedTheme
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -63,9 +61,9 @@ fun DeviceDetailsScreen(
             // Header: Icon + Name + Risk badge
             device?.let { dev ->
                 val (badgeColor, badgeText) = when (dev.riskLevel) {
-                    "SAFE" -> SafeGreen to "Safe"
-                    "SUSPICIOUS" -> RiskRed to "Suspicious"
-                    else -> WarningAmber to "Unknown"
+                    "SAFE" -> ExtendedTheme.colors.statusSafe to "Safe"
+                    "SUSPICIOUS" -> ExtendedTheme.colors.statusRisk to "Suspicious"
+                    else -> ExtendedTheme.colors.statusWarning to "Unknown"
                 }
 
                 Row(
@@ -75,6 +73,7 @@ fun DeviceDetailsScreen(
                     DeviceTypeIcon(
                         deviceName = dev.deviceName,
                         vendor = dev.vendor,
+                        deviceType = dev.deviceType,
                         modifier = Modifier.size(52.dp)
                     )
                     Column {
@@ -182,7 +181,7 @@ fun DeviceDetailsScreen(
                     Text(
                         "Try to locate this device",
                         style = MaterialTheme.typography.labelLarge,
-                        color = RiskRed
+                        color = ExtendedTheme.colors.statusRisk
                     )
                 }
             }

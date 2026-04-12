@@ -20,6 +20,7 @@ class BleScanner @Inject constructor(
     private val bluetoothAdapter: BluetoothAdapter?,
     private val ouiLookup: OuiLookup
 ) {
+    private val scanMutex = Mutex()
     private val TAG = "BleScanner"
 
     data class BleScanResult(
@@ -34,33 +35,34 @@ class BleScanner @Inject constructor(
         val vendor: String
     )
 
-    suspend fun scan(durationMs: Long = 8000): BleScanResult {
+    @Volatile private var activeCallback: ScanCallback? = null
+
+    suspend fun scan(durationMs: Long = 8000): BleScanResult = scanMutex.withLock {
         DebugLog.i(TAG, "Starting BLE scan (duration: ${durationMs}ms)…")
 
         val adapter = bluetoothAdapter
         if (adapter == null) {
-            DebugLog.e(TAG, "BluetoothAdapter is NULL — device has no Bluetooth hardware?")
-            return BleScanResult(emptyList(), false)
+            DebugLog.e(TAG, "BluetoothAdapter is NULL")
+            return@withLock BleScanResult(emptyList(), false)
         }
 
         if (!adapter.isEnabled) {
-            DebugLog.w(TAG, "Bluetooth is DISABLED, aborting BLE scan")
-            return BleScanResult(emptyList(), false)
+            DebugLog.w(TAG, "Bluetooth is DISABLED")
+            return@withLock BleScanResult(emptyList(), false)
         }
 
         val scanner = adapter.bluetoothLeScanner
         if (scanner == null) {
-            DebugLog.e(TAG, "bluetoothLeScanner is NULL — BT might be turning off")
-            return BleScanResult(emptyList(), false)
+            DebugLog.e(TAG, "bluetoothLeScanner is NULL")
+            return@withLock BleScanResult(emptyList(), false)
         }
 
-        DebugLog.i(TAG, "BLE adapter enabled, scanner obtained, starting LE scan…")
         val results = ConcurrentHashMap<String, BleDevice>()
 
-        return withTimeoutOrNull(durationMs + 1000) {
+        return@withLock withTimeoutOrNull(durationMs + 2000) {
             suspendCancellableCoroutine { continuation ->
                 val settings = ScanSettings.Builder()
-                    .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+                    .setScanMode(ScanSettings.SCAN_MODE_BALANCED)
                     .build()
 
                 val callback = object : ScanCallback() {
@@ -74,6 +76,7 @@ class BleScanner @Inject constructor(
                         val address = device.address
                         val vendor = ouiLookup.lookup(address)
                         val isNew = !results.containsKey(address)
+                        
                         results[address] = BleDevice(
                             address = address,
                             name = name,
@@ -87,40 +90,60 @@ class BleScanner @Inject constructor(
 
                     override fun onScanFailed(errorCode: Int) {
                         DebugLog.e(TAG, "BLE onScanFailed errorCode=$errorCode")
-                        if (continuation.isActive)
-                            continuation.resume(BleScanResult(emptyList(), false))
+                        if (continuation.isActive) {
+                            continuation.resume(BleScanResult(results.values.toList(), false))
+                        }
                     }
                 }
 
                 try {
+                    activeCallback = callback
                     scanner.startScan(null, settings, callback)
                     DebugLog.i(TAG, "BLE startScan() called successfully")
-                } catch (e: SecurityException) {
-                    DebugLog.e(TAG, "SecurityException on startScan: ${e.message}")
-                    continuation.resume(BleScanResult(emptyList(), false))
+                } catch (e: Exception) {
+                    DebugLog.e(TAG, "Failed to start BLE scan: ${e.message}")
+                    if (continuation.isActive) {
+                        continuation.resume(BleScanResult(emptyList(), false))
+                    }
                     return@suspendCancellableCoroutine
                 }
 
-                // Schedule stop after duration
-                val stopJob = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
-                    delay(durationMs)
+                val cleanup = {
+                    activeCallback = null
                     try {
                         scanner.stopScan(callback)
-                    } catch (e: SecurityException) { /* ignore */ }
+                    } catch (e: Exception) {
+                        DebugLog.w(TAG, "Error stopping BLE scan: ${e.message}")
+                    }
+                }
+
+                val timerJob = launch {
+                    delay(durationMs)
                     if (continuation.isActive) {
-                        DebugLog.i(TAG, "BLE scan complete → ${results.size} device(s) found")
+                        cleanup()
+                        DebugLog.i(TAG, "BLE scan duration reached → ${results.size} devices")
                         continuation.resume(BleScanResult(results.values.toList(), true))
                     }
                 }
 
                 continuation.invokeOnCancellation {
-                    stopJob.cancel()
-                    try {
-                        scanner.stopScan(callback)
-                    } catch (e: SecurityException) { /* ignore */ }
-                    DebugLog.w(TAG, "BLE scan cancelled")
+                    timerJob.cancel()
+                    cleanup()
+                    DebugLog.w(TAG, "BLE scan cancelled externally")
                 }
             }
-        } ?: BleScanResult(emptyList(), false)
+        } ?: BleScanResult(results.values.toList(), true)
+    }
+
+    fun stopScan() {
+        DebugLog.i(TAG, "Explicit stopScan() called")
+        val cb = activeCallback ?: return
+        activeCallback = null
+        try {
+            bluetoothAdapter?.bluetoothLeScanner?.stopScan(cb)
+            DebugLog.i(TAG, "BLE scan stopped via explicit stopScan()")
+        } catch (e: Exception) {
+            DebugLog.w(TAG, "Error in explicit stopScan: ${e.message}")
+        }
     }
 }

@@ -12,11 +12,16 @@ import com.devicelens.app.domain.scanner.DeviceFingerprinter
 import com.devicelens.app.domain.scanner.MagnetometerMonitor
 import com.devicelens.app.domain.scanner.WifiScanner
 import com.devicelens.app.helpers.DebugLog
+import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.supervisorScope
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeout
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -31,22 +36,43 @@ class ScanOrchestrator @Inject constructor(
     private val backendClient: BackendClient
 ) {
     private val TAG = "ScanOrchestrator"
+    private val scanMutex = Mutex()
 
     private val _scanPhase = MutableStateFlow("")
     val scanPhase: StateFlow<String> = _scanPhase
+    
+    private suspend fun stopScanners() {
+        DebugLog.i(TAG, "Stopping all active scanners before restart…")
+        try { wifiScanner.cancelScan() } catch (e: Exception) { DebugLog.w(TAG, "Fail wifi stop: ${e.message}") }
+        try { bleScanner.stopScan() } catch (e: Exception) { DebugLog.w(TAG, "Fail ble stop: ${e.message}") }
+    }
 
-    private var currentScanJob: kotlinx.coroutines.Job? = null
-
-    suspend fun runScan(): ScanResult {
-        // Cancel any existing scan first
-        currentScanJob?.cancel()
-        currentScanJob = kotlinx.coroutines.coroutineContext[kotlinx.coroutines.Job]
-
+    suspend fun runScan(): ScanResult = scanMutex.withLock {
+        stopScanners()
         DebugLog.i(TAG, "=== SCAN STARTED ===")
 
-        // Phase 1: Discover
+        return@withLock try { withTimeout(15_000) { runScanInternal() } }
+        catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+            DebugLog.w(TAG, "Scan hit 15s hard cap — returning partial results")
+            val existing = deviceRepository.getAll()
+            ScanResult(
+                totalDetected = existing.size,
+                safeCount = existing.count { it.riskLevel == "SAFE" },
+                unknownCount = existing.count { it.riskLevel == "UNKNOWN" },
+                suspiciousCount = existing.count { it.riskLevel == "SUSPICIOUS" },
+                overallStatus = when {
+                    existing.any { it.riskLevel == "SUSPICIOUS" } -> OverallStatus.RISK
+                    existing.any { it.riskLevel == "UNKNOWN" } -> OverallStatus.WARNING
+                    else -> OverallStatus.SAFE
+                },
+                permissionsPartial = true
+            )
+        }
+    }
+
+    private suspend fun runScanInternal(): ScanResult {
         val (wifi, ble, mag) = supervisorScope {
-            _scanPhase.value = "Discovering Wi-Fi devices…"
+            _scanPhase.value = "Initializing Wi-Fi discovery…"
             val wifiDeferred = async(Dispatchers.IO) {
                 try { wifiScanner.scan() }
                 catch (e: Exception) {
@@ -56,7 +82,7 @@ class ScanOrchestrator @Inject constructor(
                 }
             }
 
-            _scanPhase.value = "Scanning Bluetooth signals…"
+            _scanPhase.value = "Detecting Bluetooth devices…"
             val bleDeferred = async(Dispatchers.IO) {
                 try { bleScanner.scan(durationMs = 8000) }
                 catch (e: Exception) {
@@ -66,7 +92,7 @@ class ScanOrchestrator @Inject constructor(
                 }
             }
 
-            _scanPhase.value = "Checking electromagnetic field…"
+            _scanPhase.value = "Analyzing EMF field…"
             val magDeferred = async(Dispatchers.IO) {
                 try { magnetometerMonitor.sample(durationMs = 3000) }
                 catch (e: Exception) {
@@ -84,11 +110,13 @@ class ScanOrchestrator @Inject constructor(
 
         // Phase 2: Fingerprint Wi-Fi devices
         _scanPhase.value = "Identifying devices…"
-        val arpTable = fingerprinter.readArpTable()
         val wifiIps = wifi.devices.map { it.ip }
 
+        // Detect gateway IP (typically x.x.x.1)
+        val gatewayIp = wifiIps.firstOrNull { it.endsWith(".1") }
+
         val fingerprints = try {
-            fingerprinter.fingerprintAll(wifiIps, arpTable)
+            fingerprinter.fingerprintAll(wifiIps, emptyMap(), gatewayIp)
         } catch (e: Exception) {
             DebugLog.e(TAG, "Fingerprinting failed: ${e.message}")
             emptyMap()
@@ -107,8 +135,10 @@ class ScanOrchestrator @Inject constructor(
                 else -> "Unknown"
             }
 
-            // Name: prefer fingerprint-discovered name, then mDNS/SSDP name, then IP
-            val name = fp?.friendlyName ?: device.hostname ?: device.ip
+            // Name: prefer mDNS/SSDP discovery name, then fingerprint, then fallback
+            val name = device.hostname?.takeIf { it.length > 2 && !it.startsWith("192.") }
+                ?: fp?.friendlyName?.takeIf { it.lowercase() !in listOf("nginx", "apache", "null", "index") }
+                ?: "Device at ${device.ip}"
 
             DebugLog.i(TAG, "Enriched: ${device.ip} → name='$name' vendor='$vendor' type='${fp?.deviceType}' mac=$mac signals=${fp?.signals?.size ?: 0}")
 
@@ -158,16 +188,54 @@ class ScanOrchestrator @Inject constructor(
                     val backendResults = backendClient.identifyBatch(identifyRequests)
                     if (backendResults != null) {
                         DebugLog.i(TAG, "Backend returned ${backendResults.size} enrichment results")
-                        // Log enrichments but don't override local classification yet
-                        // This data will be stored and displayed as supplementary info
-                        backendResults.forEachIndexed { index, result ->
-                            if (result.match != null) {
-                                DebugLog.i(TAG, "Backend enrichment [$index]: ${result.match.deviceType} (${result.match.threatLevel}, confidence=${result.match.confidence})")
-                            }
-                            if (result.communityReports != null && result.communityReports.totalReports > 0) {
-                                DebugLog.i(TAG, "Backend community reports [$index]: ${result.communityReports.totalReports} reports")
+                        
+                        // Merge enrichment into the classified list
+                        val enrichedList = classified.toMutableList()
+                        
+                        // Let's do a more robust merge by index since they are ordered
+                        var backendIdx = 0
+                        enrichedWifiDevices.forEach { dev ->
+                            if (dev.mac != null && backendIdx < backendResults.size) {
+                                val enrichment = backendResults[backendIdx++]
+                                val match = enrichment.match
+                                if (match != null) {
+                                    // Find this device in the classified list and update it
+                                    val index = enrichedList.indexOfFirst { it.macAddress == dev.mac }
+                                    if (index != -1) {
+                                        val old = enrichedList[index]
+                                        enrichedList[index] = old.copy(
+                                            deviceType = match.deviceType,
+                                            vendor = if (match.signatureName.isNotEmpty()) match.signatureName else old.vendor,
+                                            riskLevel = when(match.threatLevel) {
+                                                "HIGH" -> "SUSPICIOUS"
+                                                "MEDIUM" -> if (old.riskLevel == "SAFE") "UNKNOWN" else old.riskLevel
+                                                else -> old.riskLevel
+                                            }
+                                        )
+                                        DebugLog.i(TAG, "Enriched ${dev.ipAddress} with backend data: ${match.deviceType}")
+                                    }
+                                }
                             }
                         }
+                        
+                        // Update the final list to be saved
+                        deviceRepository.upsertAll(enrichedList)
+                        
+                        // Update results with enriched data
+                        val result = ScanResult(
+                            totalDetected = enrichedList.size,
+                            safeCount = enrichedList.count { it.riskLevel == "SAFE" },
+                            unknownCount = enrichedList.count { it.riskLevel == "UNKNOWN" },
+                            suspiciousCount = enrichedList.count { it.riskLevel == "SUSPICIOUS" },
+                            overallStatus = when {
+                                enrichedList.any { it.riskLevel == "SUSPICIOUS" } -> OverallStatus.RISK
+                                enrichedList.any { it.riskLevel == "UNKNOWN" } -> OverallStatus.WARNING
+                                else -> OverallStatus.SAFE
+                            },
+                            permissionsPartial = !wifi.fullScan || !ble.fullScan
+                        )
+                        DebugLog.i(TAG, "=== SCAN COMPLETE (ENRICHED) === status=${result.overallStatus}")
+                        return result
                     }
                 }
             } catch (e: Exception) {
@@ -175,6 +243,7 @@ class ScanOrchestrator @Inject constructor(
             }
         }
 
+        // Fallback or if backend disabled
         deviceRepository.upsertAll(classified)
         _scanPhase.value = ""
 

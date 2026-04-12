@@ -25,7 +25,8 @@ type GoogleTokenInfo struct {
 // VerifyGoogleIDToken verifies a Google ID token via Google's tokeninfo endpoint.
 func VerifyGoogleIDToken(ctx context.Context, idToken string) (*GoogleTokenInfo, error) {
 	clientID := os.Getenv("GOOGLE_CLIENT_ID")
-	if clientID == "" {
+	androidClientID := os.Getenv("GOOGLE_ANDROID_CLIENT_ID")
+	if clientID == "" && androidClientID == "" {
 		return nil, fmt.Errorf("GOOGLE_CLIENT_ID not configured")
 	}
 
@@ -57,8 +58,8 @@ func VerifyGoogleIDToken(ctx context.Context, idToken string) (*GoogleTokenInfo,
 		return nil, fmt.Errorf("parse response: %w", err)
 	}
 
-	if info.Aud != clientID {
-		return nil, fmt.Errorf("token audience mismatch: got %s, want %s", info.Aud, clientID)
+	if info.Aud != clientID && info.Aud != androidClientID {
+		return nil, fmt.Errorf("token audience mismatch: got %s, want web=%s or android=%s", info.Aud, clientID, androidClientID)
 	}
 
 	if info.Iss != "accounts.google.com" && info.Iss != "https://accounts.google.com" {

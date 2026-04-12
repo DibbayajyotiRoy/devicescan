@@ -30,6 +30,11 @@ class BackendClient @Inject constructor(
 
     companion object {
         private const val PREF_CLOUD_ENABLED = "cloud_intelligence_enabled"
+        private const val PREF_ACCESS_TOKEN = "access_token"
+        private const val PREF_REFRESH_TOKEN = "refresh_token"
+        private const val PREF_USER_NAME = "user_name"
+        private const val PREF_USER_EMAIL = "user_email"
+        private const val PREF_USER_AVATAR = "user_avatar"
     }
 
     val baseUrl: String = BuildConfig.BACKEND_API_URL
@@ -40,10 +45,58 @@ class BackendClient @Inject constructor(
             prefs.edit().putBoolean(PREF_CLOUD_ENABLED, value).apply()
         }
 
+    fun getAccessToken(): String? = prefs.getString(PREF_ACCESS_TOKEN, null)
+    fun getUserName(): String? = prefs.getString(PREF_USER_NAME, null)
+    fun getUserEmail(): String? = prefs.getString(PREF_USER_EMAIL, null)
+    fun getUserAvatar(): String? = prefs.getString(PREF_USER_AVATAR, null)
+    fun isLoggedIn(): Boolean = getAccessToken() != null
+
+    suspend fun loginWithGoogle(idToken: String, localAvatarUrl: String? = null): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val body = JSONObject().apply {
+                put("idToken", idToken)
+            }
+            val json = post("$baseUrl/api/v1/auth/google", body, skipAuth = true) ?: return@withContext false
+            
+            val accessToken = json.optString("accessToken")
+            val refreshToken = json.optString("refreshToken")
+            val user = json.optJSONObject("user")
+            
+            if (accessToken.isNotEmpty()) {
+                prefs.edit().apply {
+                    putString(PREF_ACCESS_TOKEN, accessToken)
+                    putString(PREF_REFRESH_TOKEN, refreshToken)
+                    putString(PREF_USER_NAME, user?.optString("name"))
+                    putString(PREF_USER_EMAIL, user?.optString("email"))
+                    putString(PREF_USER_AVATAR, user?.optString("avatar_url") ?: localAvatarUrl)
+                    apply()
+                }
+                DebugLog.i(TAG, "Login successful for ${user?.optString("email")}")
+                return@withContext true
+            }
+            false
+        } catch (e: Exception) {
+            DebugLog.e(TAG, "Login failed: ${e.message}")
+            false
+        }
+    }
+
+    fun logout() {
+        prefs.edit().apply {
+            remove(PREF_ACCESS_TOKEN)
+            remove(PREF_REFRESH_TOKEN)
+            remove(PREF_USER_NAME)
+            remove(PREF_USER_EMAIL)
+            remove(PREF_USER_AVATAR)
+            apply()
+        }
+        DebugLog.i(TAG, "User logged out")
+    }
+
     // ─── Identify a single device ───────────────────────────────────
 
     suspend fun identify(request: IdentifyRequest): IdentifyResponse? = withContext(Dispatchers.IO) {
-        if (!isEnabled || baseUrl.isBlank()) return@withContext null
+        if (baseUrl.isBlank()) return@withContext null
 
         try {
             val body = JSONObject().apply {
@@ -69,7 +122,7 @@ class BackendClient @Inject constructor(
     // ─── Identify a batch of devices ────────────────────────────────
 
     suspend fun identifyBatch(requests: List<IdentifyRequest>): List<IdentifyResponse>? = withContext(Dispatchers.IO) {
-        if (!isEnabled || baseUrl.isBlank() || requests.isEmpty()) return@withContext null
+        if (baseUrl.isBlank() || requests.isEmpty()) return@withContext null
 
         try {
             val devicesArray = JSONArray()
@@ -106,7 +159,7 @@ class BackendClient @Inject constructor(
     // ─── Submit community report ────────────────────────────────────
 
     suspend fun report(request: ReportRequest): ReportResponse? = withContext(Dispatchers.IO) {
-        if (!isEnabled || baseUrl.isBlank()) return@withContext null
+        if (baseUrl.isBlank()) return@withContext null
 
         try {
             val fp = JSONObject().apply {
@@ -140,6 +193,23 @@ class BackendClient @Inject constructor(
         }
     }
 
+    // ─── Telemetry ──────────────────────────────────────────────────
+
+    suspend fun reportError(message: String, stackTrace: String) = withContext(Dispatchers.IO) {
+        if (baseUrl.isBlank()) return@withContext
+        try {
+            val body = JSONObject().apply {
+                put("error", message)
+                put("stackTrace", stackTrace)
+                put("deviceModel", android.os.Build.MODEL)
+                put("osVersion", android.os.Build.VERSION.RELEASE)
+            }
+            post("$baseUrl/api/v1/telemetry/error", body)
+        } catch (e: Exception) {
+            // Silently ignore telemetry failures
+        }
+    }
+
     // ─── Health check ───────────────────────────────────────────────
 
     suspend fun checkHealth(): Boolean = withContext(Dispatchers.IO) {
@@ -155,13 +225,20 @@ class BackendClient @Inject constructor(
 
     // ─── HTTP helpers ───────────────────────────────────────────────
 
-    private fun post(url: String, body: JSONObject): JSONObject? {
+    private fun post(url: String, body: JSONObject, skipAuth: Boolean = false): JSONObject? {
         val conn = URL(url).openConnection() as HttpURLConnection
         conn.requestMethod = "POST"
         conn.connectTimeout = 5000
         conn.readTimeout = 10000
         conn.setRequestProperty("Content-Type", "application/json")
         conn.setRequestProperty("Accept", "application/json")
+        
+        if (!skipAuth) {
+            getAccessToken()?.let {
+                conn.setRequestProperty("Authorization", "Bearer $it")
+            }
+        }
+        
         conn.doOutput = true
 
         try {
@@ -185,6 +262,10 @@ class BackendClient @Inject constructor(
         conn.connectTimeout = 5000
         conn.readTimeout = 5000
         conn.setRequestProperty("Accept", "application/json")
+        
+        getAccessToken()?.let {
+            conn.setRequestProperty("Authorization", "Bearer $it")
+        }
 
         try {
             if (conn.responseCode !in 200..299) {

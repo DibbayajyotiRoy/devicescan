@@ -11,6 +11,7 @@ import com.devicelens.app.ui.debug.DebugLogScreen
 import com.devicelens.app.ui.details.DeviceDetailsScreen
 import com.devicelens.app.ui.locate.LocateModeSheet
 import com.devicelens.app.ui.locate.LocateViewModel
+import com.devicelens.app.ui.onboarding.OnboardingScreen
 import com.devicelens.app.ui.settings.SettingsSheet
 import com.devicelens.app.ui.setup.SetupScreen
 import com.devicelens.app.ui.status.StatusScreen
@@ -20,13 +21,17 @@ sealed class Screen(val route: String) {
     data object Status : Screen("status")
     data object Setup : Screen("setup")
     data object DebugLog : Screen("debug_log")
+    data object Onboarding : Screen("onboarding")
     data object DeviceDetails : Screen("device_details/{deviceId}") {
         fun createRoute(deviceId: Long) = "device_details/$deviceId"
     }
 }
 
 @Composable
-fun DeviceLensNavHost() {
+fun DeviceLensNavHost(
+    isLoggedIn: Boolean,
+    onLoginSuccess: () -> Unit
+) {
     val navController = rememberNavController()
     var showSettings by remember { mutableStateOf(false) }
     var locateDeviceId by remember { mutableStateOf<Long?>(null) }
@@ -52,8 +57,19 @@ fun DeviceLensNavHost() {
 
     NavHost(
         navController = navController,
-        startDestination = Screen.Status.route
+        startDestination = if (isLoggedIn) Screen.Status.route else Screen.Onboarding.route
     ) {
+        composable(Screen.Onboarding.route) {
+            OnboardingScreen(
+                onComplete = {
+                    onLoginSuccess()
+                    navController.navigate(Screen.Status.route) {
+                        popUpTo(Screen.Onboarding.route) { inclusive = true }
+                    }
+                }
+            )
+        }
+
         composable(Screen.Status.route) {
             StatusScreen(
                 onDeviceClick = { deviceId ->
@@ -68,6 +84,7 @@ fun DeviceLensNavHost() {
                 }
             )
         }
+// ... [rest of the composables] ...
 
         composable(Screen.Setup.route) {
             val statusVM: StatusViewModel = hiltViewModel(

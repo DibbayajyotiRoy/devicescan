@@ -97,6 +97,7 @@ fun SetupScreen(
                             DeviceTypeIcon(
                                 deviceName = device.deviceName,
                                 vendor = device.vendor,
+                                deviceType = device.deviceType,
                                 modifier = Modifier.size(44.dp)
                             )
 
