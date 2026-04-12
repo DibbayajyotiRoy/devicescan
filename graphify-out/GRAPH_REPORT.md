@@ -1,12 +1,12 @@
-# Graph Report - .  (2026-04-11)
+# Graph Report - .  (2026-04-12)
 
 ## Corpus Check
-- 123 files · ~60,390 words
+- 113 files · ~62,805 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 549 nodes · 542 edges · 79 communities detected
-- Extraction: 98% EXTRACTED · 2% INFERRED · 0% AMBIGUOUS · INFERRED: 10 edges (avg confidence: 0.85)
+- 489 nodes · 477 edges · 72 communities detected
+- Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS
 - Token cost: 0 input · 0 output
 
 ## God Nodes (most connected - your core abstractions)
@@ -14,408 +14,365 @@
 2. `StatusViewModel` - 15 edges
 3. `DeviceRepository` - 13 edges
 4. `WifiScanner` - 12 edges
-5. `DeviceType` - 10 edges
-6. `SettingsViewModel` - 10 edges
+5. `SettingsViewModel` - 11 edges
+6. `DeviceType` - 10 edges
 7. `DeviceDao` - 9 edges
-8. `ScanOrchestrator` - 9 edges
-9. `DeviceFingerprinter` - 8 edges
-10. `LocateViewModel` - 7 edges
+8. `LocateViewModel` - 7 edges
+9. `BleScanner` - 7 edges
+10. `WifiDevice` - 7 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `Zero-Dependency Privacy Engine` --semantically_similar_to--> `Privacy Promise (Device Lens Oath)`  [INFERRED] [semantically similar]
-  COMPLIANCE_REPORT.md → README.md
-- `DeviceFingerprinter` --semantically_similar_to--> `WifiScanner`  [INFERRED] [semantically similar]
-  device_identification.md → ARCHITECTURE.md
-- `OUI Vendor Lookup Table (iOS Bundle)` --semantically_similar_to--> `OUI Vendor Lookup Table (Shared)`  [INFERRED] [semantically similar]
-  ios/DeviceLens/Resources/oui.txt → shared/oui.txt
-- `OUI Vendor Lookup Table (iOS Bundle)` --semantically_similar_to--> `OUI Vendor Lookup Table (Android Assets)`  [INFERRED] [semantically similar]
-  ios/DeviceLens/Resources/oui.txt → android/app/src/main/assets/oui.txt
-- `OUI Vendor Lookup Table (Android Assets)` --semantically_similar_to--> `OUI Vendor Lookup Table (Shared)`  [INFERRED] [semantically similar]
-  android/app/src/main/assets/oui.txt → shared/oui.txt
-
-## Hyperedges (group relationships)
-- **10-Second Concurrent Scan Pipeline** — arch_scan_orchestrator, arch_wifi_scanner, arch_ble_scanner, arch_magnetometer_monitor, arch_classification_engine [EXTRACTED 1.00]
-- **Offline Enforcement Layered Defense** — mbp_android_internet_strip, mbp_ios_ats_block, mbp_offline_blocking_protocol, arch_offline_enforcement, readme_privacy_promise [EXTRACTED 1.00]
-- **Risk Classification Signal Aggregation** — devid_tcp_port_scan, devid_udp_iot_probe, arch_magnetometer_monitor, arch_oui_lookup, arch_classification_engine [INFERRED 0.85]
+- `DeviceType` --case_of--> `router`  [EXTRACTED]
+  android/app/src/main/java/com/devicelens/app/helpers/DeviceTypeInferrer.kt → ios/DeviceLens/Helpers/DeviceTypeInferrer.swift
+- `DeviceType` --case_of--> `phone`  [EXTRACTED]
+  android/app/src/main/java/com/devicelens/app/helpers/DeviceTypeInferrer.kt → ios/DeviceLens/Helpers/DeviceTypeInferrer.swift
+- `DeviceType` --case_of--> `computer`  [EXTRACTED]
+  android/app/src/main/java/com/devicelens/app/helpers/DeviceTypeInferrer.kt → ios/DeviceLens/Helpers/DeviceTypeInferrer.swift
+- `DeviceType` --case_of--> `tv`  [EXTRACTED]
+  android/app/src/main/java/com/devicelens/app/helpers/DeviceTypeInferrer.kt → ios/DeviceLens/Helpers/DeviceTypeInferrer.swift
+- `DeviceType` --case_of--> `speaker`  [EXTRACTED]
+  android/app/src/main/java/com/devicelens/app/helpers/DeviceTypeInferrer.kt → ios/DeviceLens/Helpers/DeviceTypeInferrer.swift
 
 ## Communities
 
-### Community 0 - "Scan Orchestration Pipeline"
-Cohesion: 0.07
-Nodes (38): Android Background Scan (WorkManager), iOS Background Scan (BGAppRefreshTask), BleScanner, ClassificationEngine, compositeKey Fingerprint, Device Details Screen, DeviceRepository, Devices SQLite Table Schema (+30 more)
-
-### Community 1 - "iOS Navigation & Detail View"
+### Community 0 - "Community 0"
 Cohesion: 0.06
 Nodes (17): AppNavigation, DetailRow, DeviceDetailView, DeviceRow(), DeviceTypeIcon(), LimitationNudge(), PermissionBanner(), SettingsSheet() (+9 more)
 
-### Community 2 - "Device Detail ViewModel & Locate"
-Cohesion: 0.09
+### Community 1 - "Community 1"
+Cohesion: 0.08
 Nodes (7): DeviceDetailViewModel, LocateModeSheet(), LocateViewModel, ObservableObject, ScanOrchestrator, SetupView, SetupViewModel
 
-### Community 3 - "App Bootstrap & Delegates"
+### Community 2 - "Community 2"
 Cohesion: 0.12
 Nodes (9): AppDelegate, AVCaptureVideoDataOutputSampleBufferDelegate, BleDevice, BleScanner, BleScanResult, CBCentralManagerDelegate, IrDetector, NSObject (+1 more)
 
-### Community 4 - "WiFi Scanner & mDNS Discovery"
+### Community 3 - "Community 3"
 Cohesion: 0.17
 Nodes (4): Hashable, WifiDevice, WifiScanner, WifiScanResult
 
-### Community 5 - "Backend Analytics Handler"
+### Community 4 - "Community 4"
 Cohesion: 0.14
 Nodes (12): NewAnalytics(), nilIfEmpty(), Analytics, statusWriter, AdminDashboard, AdminUserEntry, ApiEvent, CountryStat (+4 more)
 
-### Community 6 - "Android Backend Client"
+### Community 5 - "Community 5"
 Cohesion: 0.12
 Nodes (1): BackendClient
 
-### Community 7 - "Status Screen ViewModel"
+### Community 6 - "Community 6"
 Cohesion: 0.15
 Nodes (1): StatusViewModel
 
-### Community 8 - "Android Device Repository"
+### Community 7 - "Community 7"
 Cohesion: 0.24
 Nodes (1): DeviceRepository
 
-### Community 9 - "Device Type Inference"
+### Community 8 - "Community 8"
 Cohesion: 0.15
 Nodes (11): DeviceType, camera, computer, iot, phone, router, speaker, tv (+3 more)
 
-### Community 10 - "Go Matcher / Fingerprint Lookup"
+### Community 9 - "Community 9"
 Cohesion: 0.27
 Nodes (6): Matcher, containsInt(), getRecommendation(), HashFingerprint(), ptrOr(), scoreSignature()
 
-### Community 11 - "Offline Privacy Architecture"
-Cohesion: 0.18
-Nodes (12): Offline Enforcement Chain, Backend api_events Logging Table, No Analytics SDK Verification, Zero-Dependency Privacy Engine, Android INTERNET Permission Removal, iOS ATS NSAllowsArbitraryLoads Block, Master Build Prompt v3.0, OfflineBlockingProtocol (iOS Debug Guard) (+4 more)
+### Community 10 - "Community 10"
+Cohesion: 0.17
+Nodes (1): SettingsViewModel
 
-### Community 12 - "Go Auth Handlers"
+### Community 11 - "Community 11"
 Cohesion: 0.25
 Nodes (6): extractBearerToken(), GoogleAuthHandler(), nilStr(), OptionalAuth(), RequireAuth(), contextKey
 
-### Community 13 - "Android Backend Models"
+### Community 12 - "Community 12"
 Cohesion: 0.18
 Nodes (10): BatchIdentifyRequest, BatchIdentifyResponse, CommunityData, DeviceMatch, HealthResponse, IdentifyRequest, IdentifyResponse, ReportRequest (+2 more)
 
-### Community 14 - "Settings ViewModel & Auth"
-Cohesion: 0.18
-Nodes (1): SettingsViewModel
-
-### Community 15 - "Backend Device Models"
+### Community 13 - "Community 13"
 Cohesion: 0.2
 Nodes (9): CommunityData, CommunityReport, DeviceFingerprint, DeviceMatch, KnownDevice, MatchResult, OuiEntry, Signature (+1 more)
 
-### Community 16 - "Debug Logger"
+### Community 14 - "Community 14"
 Cohesion: 0.2
 Nodes (3): DebugLog, Entry, Level
 
-### Community 17 - "Room Device DAO"
+### Community 15 - "Community 15"
 Cohesion: 0.2
 Nodes (1): DeviceDao
 
-### Community 18 - "ARP Fingerprinting"
-Cohesion: 0.2
-Nodes (2): DeviceFingerprinter, Fingerprint
-
-### Community 19 - "Onboarding ViewModel"
-Cohesion: 0.22
-Nodes (6): Error, Idle, Loading, OnboardingUiState, OnboardingViewModel, Success
-
-### Community 20 - "Android Navigation Graph"
-Cohesion: 0.22
-Nodes (6): DebugLog, DeviceDetails, Onboarding, Screen, Setup, Status
-
-### Community 21 - "Classification Engine"
+### Community 16 - "Community 16"
 Cohesion: 0.28
 Nodes (1): ClassificationEngine
 
-### Community 22 - "Scan Result & Status Models"
+### Community 17 - "Community 17"
+Cohesion: 0.22
+Nodes (6): Error, Idle, Loading, OnboardingUiState, OnboardingViewModel, Success
+
+### Community 18 - "Community 18"
+Cohesion: 0.22
+Nodes (6): DebugLog, DeviceDetails, Onboarding, Screen, Setup, Status
+
+### Community 19 - "Community 19"
 Cohesion: 0.25
 Nodes (7): OverallStatus, notCalibrated, risk, safe, scanning, warning, ScanResult
 
-### Community 23 - "Admin Dashboard Handlers"
+### Community 20 - "Community 20"
 Cohesion: 0.25
 Nodes (0): 
 
-### Community 24 - "Core Data Device Record"
+### Community 21 - "Community 21"
 Cohesion: 0.29
 Nodes (4): DeviceRecord, DeviceSummary, Identifiable, NSManagedObject
 
-### Community 25 - "iOS Offline URL Protocol"
+### Community 22 - "Community 22"
 Cohesion: 0.29
 Nodes (2): OfflineBlockingProtocol, URLProtocol
 
-### Community 26 - "Rate Limiter Middleware"
+### Community 23 - "Community 23"
 Cohesion: 0.38
 Nodes (3): RateLimiter, visitor, NewRateLimiter()
 
-### Community 27 - "Notification Helper"
+### Community 24 - "Community 24"
 Cohesion: 0.4
 Nodes (1): NotificationHelper
 
-### Community 28 - "Auth User Models"
+### Community 25 - "Community 25"
 Cohesion: 0.33
 Nodes (5): AdminLoginRequest, AuthResponse, GoogleAuthRequest, Session, User
 
-### Community 29 - "JWT Token Module"
+### Community 26 - "Community 26"
 Cohesion: 0.53
 Nodes (5): Claims, getSecret(), IssueAccessToken(), IssueRefreshToken(), ValidateToken()
 
-### Community 30 - "Status Screen UI"
+### Community 27 - "Community 27"
 Cohesion: 0.33
 Nodes (0): 
 
-### Community 31 - "Onboarding Screen UI"
+### Community 28 - "Community 28"
 Cohesion: 0.33
 Nodes (1): OnboardingSlide
 
-### Community 32 - "Floating Glass Nav"
+### Community 29 - "Community 29"
 Cohesion: 0.33
 Nodes (0): 
 
-### Community 33 - "Locate ViewModel"
+### Community 30 - "Community 30"
 Cohesion: 0.33
 Nodes (1): LocateViewModel
 
-### Community 34 - "Setup ViewModel"
+### Community 31 - "Community 31"
 Cohesion: 0.33
 Nodes (1): SetupViewModel
 
-### Community 35 - "Google Auth Manager"
+### Community 32 - "Community 32"
+Cohesion: 0.33
+Nodes (2): DeviceFingerprinter, Fingerprint
+
+### Community 33 - "Community 33"
 Cohesion: 0.33
 Nodes (1): GoogleAuthManager
 
-### Community 36 - "OUI Vendor Lookup (Android)"
+### Community 34 - "Community 34"
 Cohesion: 0.5
 Nodes (1): OuiLookup
 
-### Community 37 - "Premium Button Components"
+### Community 35 - "Community 35"
 Cohesion: 0.4
 Nodes (0): 
 
-### Community 38 - "Device Details ViewModel"
+### Community 36 - "Community 36"
 Cohesion: 0.4
 Nodes (1): DeviceDetailsViewModel
 
-### Community 39 - "Theme System"
+### Community 37 - "Community 37"
 Cohesion: 0.4
 Nodes (2): ExtendedColors, ExtendedTheme
 
-### Community 40 - "Hilt App Module"
+### Community 38 - "Community 38"
 Cohesion: 0.4
 Nodes (1): AppModule
 
-### Community 41 - "Magnetometer Monitor"
+### Community 39 - "Community 39"
 Cohesion: 0.67
 Nodes (2): MagnetometerMonitor, MagnetometerReading
 
-### Community 42 - "iOS Background Task"
+### Community 40 - "Community 40"
 Cohesion: 0.67
 Nodes (1): BackgroundScanTask
 
-### Community 43 - "Go HTTP Helpers"
+### Community 41 - "Community 41"
 Cohesion: 0.5
 Nodes (1): Deps
 
-### Community 44 - "Android Main Activity"
+### Community 42 - "Community 42"
+Cohesion: 0.5
+Nodes (1): DeviceLensApplication
+
+### Community 43 - "Community 43"
 Cohesion: 0.5
 Nodes (1): MainActivity
 
-### Community 45 - "Room Database"
+### Community 44 - "Community 44"
 Cohesion: 0.5
 Nodes (1): AppDatabase
 
-### Community 46 - "Room DI Module"
+### Community 45 - "Community 45"
 Cohesion: 0.5
 Nodes (1): DatabaseModule
 
-### Community 47 - "Project Identity Docs"
-Cohesion: 0.5
-Nodes (4): Graphify Knowledge Graph Rules, DeviceLens Project Identity, Device Lens Product Pitch, Rationale: Translate Rather Than Remove Information
-
-### Community 48 - "iOS App Entry"
+### Community 46 - "Community 46"
 Cohesion: 0.67
 Nodes (2): App, DeviceLensApp
 
-### Community 49 - "Core Data Persistence"
+### Community 47 - "Community 47"
 Cohesion: 0.67
 Nodes (1): PersistenceController
 
-### Community 50 - "Relative Time Formatter"
+### Community 48 - "Community 48"
 Cohesion: 0.67
 Nodes (1): RelativeTimeFormatter
 
-### Community 51 - "Identify Handler"
+### Community 49 - "Community 49"
 Cohesion: 0.67
 Nodes (0): 
 
-### Community 52 - "Telemetry Handler"
+### Community 50 - "Community 50"
 Cohesion: 1.0
 Nodes (2): nilIfEmpty(), TelemetryHandler()
 
-### Community 53 - "OUI Lookup Handler"
+### Community 51 - "Community 51"
 Cohesion: 0.67
 Nodes (0): 
 
-### Community 54 - "Signatures Handler"
+### Community 52 - "Community 52"
 Cohesion: 1.0
 Nodes (2): parseJSONOrDefault(), SignaturesLatestHandler()
 
-### Community 55 - "Google Token Verifier"
+### Community 53 - "Community 53"
 Cohesion: 0.67
 Nodes (1): GoogleTokenInfo
 
-### Community 56 - "Device Details Screen"
+### Community 54 - "Community 54"
 Cohesion: 0.67
 Nodes (0): 
 
-### Community 57 - "Background Scan Worker"
+### Community 55 - "Community 55"
 Cohesion: 0.67
 Nodes (1): BackgroundScanWorker
 
-### Community 58 - "Raw Device Model"
+### Community 56 - "Community 56"
 Cohesion: 1.0
 Nodes (1): RawDevice
 
-### Community 59 - "Health Handler"
+### Community 57 - "Community 57"
 Cohesion: 1.0
 Nodes (0): 
 
-### Community 60 - "Report Handler"
+### Community 58 - "Community 58"
 Cohesion: 1.0
 Nodes (0): 
 
-### Community 61 - "CORS Middleware"
+### Community 59 - "Community 59"
 Cohesion: 1.0
 Nodes (0): 
 
-### Community 62 - "Recover Middleware"
+### Community 60 - "Community 60"
 Cohesion: 1.0
 Nodes (0): 
 
-### Community 63 - "Postgres Pool"
+### Community 61 - "Community 61"
 Cohesion: 1.0
 Nodes (0): 
 
-### Community 64 - "Database Migrations"
+### Community 62 - "Community 62"
 Cohesion: 1.0
 Nodes (0): 
 
-### Community 65 - "Go Main Entry"
+### Community 63 - "Community 63"
 Cohesion: 1.0
 Nodes (0): 
 
-### Community 66 - "Android App Class"
-Cohesion: 1.0
-Nodes (1): DeviceLensApplication
-
-### Community 67 - "Device Room Entity"
+### Community 64 - "Community 64"
 Cohesion: 1.0
 Nodes (1): DeviceEntity
 
-### Community 68 - "Debug Log Screen"
+### Community 65 - "Community 65"
 Cohesion: 1.0
 Nodes (0): 
 
-### Community 69 - "Device Icon Component"
+### Community 66 - "Community 66"
 Cohesion: 1.0
 Nodes (0): 
 
-### Community 70 - "Setup Screen"
+### Community 67 - "Community 67"
 Cohesion: 1.0
 Nodes (0): 
 
-### Community 71 - "Scanner DI Module"
+### Community 68 - "Community 68"
 Cohesion: 1.0
 Nodes (1): ScannerModule
 
-### Community 72 - "Overall Status Enum"
+### Community 69 - "Community 69"
 Cohesion: 1.0
 Nodes (1): OverallStatus
 
-### Community 73 - "Compliance Action Plan"
-Cohesion: 1.0
-Nodes (2): Compliance Action Plan, Legal and Compliance Gaps
-
-### Community 74 - "Repo Structure & Setup"
-Cohesion: 1.0
-Nodes (2): Monorepo Structure, setup.sh Automated Environment
-
-### Community 75 - "App Build Config"
+### Community 70 - "Community 70"
 Cohesion: 1.0
 Nodes (0): 
 
-### Community 76 - "Gradle Settings"
+### Community 71 - "Community 71"
 Cohesion: 1.0
 Nodes (0): 
-
-### Community 77 - "System Overview Doc"
-Cohesion: 1.0
-Nodes (1): Device Lens System Overview
-
-### Community 78 - "Three-Layer Architecture Doc"
-Cohesion: 1.0
-Nodes (1): Three-Layer Architecture (Presentation/Domain/Data)
 
 ## Knowledge Gaps
-- **101 isolated node(s):** `stronger`, `stable`, `weaker`, `RawDevice`, `safe` (+96 more)
+- **74 isolated node(s):** `stronger`, `stable`, `weaker`, `RawDevice`, `safe` (+69 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **Thin community `Raw Device Model`** (2 nodes): `RawDevice.kt`, `RawDevice`
+- **Thin community `Community 56`** (2 nodes): `RawDevice.kt`, `RawDevice`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Health Handler`** (2 nodes): `health.go`, `HealthHandler()`
+- **Thin community `Community 57`** (2 nodes): `health.go`, `HealthHandler()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Report Handler`** (2 nodes): `report.go`, `ReportHandler()`
+- **Thin community `Community 58`** (2 nodes): `report.go`, `ReportHandler()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `CORS Middleware`** (2 nodes): `cors.go`, `CORS()`
+- **Thin community `Community 59`** (2 nodes): `cors.go`, `CORS()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Recover Middleware`** (2 nodes): `recover.go`, `Recover()`
+- **Thin community `Community 60`** (2 nodes): `recover.go`, `Recover()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Postgres Pool`** (2 nodes): `postgres.go`, `NewPool()`
+- **Thin community `Community 61`** (2 nodes): `postgres.go`, `NewPool()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Database Migrations`** (2 nodes): `migrate.go`, `RunMigrations()`
+- **Thin community `Community 62`** (2 nodes): `migrate.go`, `RunMigrations()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Go Main Entry`** (2 nodes): `main.go`, `main()`
+- **Thin community `Community 63`** (2 nodes): `main.go`, `main()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Android App Class`** (2 nodes): `DeviceLensApplication.kt`, `DeviceLensApplication`
+- **Thin community `Community 64`** (2 nodes): `DeviceEntity.kt`, `DeviceEntity`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Device Room Entity`** (2 nodes): `DeviceEntity.kt`, `DeviceEntity`
+- **Thin community `Community 65`** (2 nodes): `DebugLogScreen.kt`, `DebugLogScreen()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Debug Log Screen`** (2 nodes): `DebugLogScreen.kt`, `DebugLogScreen()`
+- **Thin community `Community 66`** (2 nodes): `DeviceIcon.kt`, `DeviceIcon()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Device Icon Component`** (2 nodes): `DeviceIcon.kt`, `DeviceIcon()`
+- **Thin community `Community 67`** (2 nodes): `SetupScreen.kt`, `SetupScreen()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Setup Screen`** (2 nodes): `SetupScreen.kt`, `SetupScreen()`
+- **Thin community `Community 68`** (2 nodes): `ScannerModule.kt`, `ScannerModule`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Scanner DI Module`** (2 nodes): `ScannerModule.kt`, `ScannerModule`
+- **Thin community `Community 69`** (2 nodes): `OverallStatus.kt`, `OverallStatus`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Overall Status Enum`** (2 nodes): `OverallStatus.kt`, `OverallStatus`
+- **Thin community `Community 70`** (1 nodes): `build.gradle.kts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Compliance Action Plan`** (2 nodes): `Compliance Action Plan`, `Legal and Compliance Gaps`
-  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Repo Structure & Setup`** (2 nodes): `Monorepo Structure`, `setup.sh Automated Environment`
-  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `App Build Config`** (1 nodes): `build.gradle.kts`
-  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Gradle Settings`** (1 nodes): `settings.gradle.kts`
-  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `System Overview Doc`** (1 nodes): `Device Lens System Overview`
-  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Three-Layer Architecture Doc`** (1 nodes): `Three-Layer Architecture (Presentation/Domain/Data)`
+- **Thin community `Community 71`** (1 nodes): `settings.gradle.kts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `StatusViewModel` connect `Status Screen ViewModel` to `Device Detail ViewModel & Locate`?**
+- **Why does `StatusViewModel` connect `Community 6` to `Community 1`?**
+  _High betweenness centrality (0.008) - this node is a cross-community bridge._
+- **Why does `LocateModeSheet()` connect `Community 1` to `Community 0`?**
   _High betweenness centrality (0.007) - this node is a cross-community bridge._
-- **Why does `LocateModeSheet()` connect `Device Detail ViewModel & Locate` to `iOS Navigation & Detail View`?**
-  _High betweenness centrality (0.006) - this node is a cross-community bridge._
 - **What connects `stronger`, `stable`, `weaker` to the rest of the system?**
-  _101 weakly-connected nodes found - possible documentation gaps or missing edges._
-- **Should `Scan Orchestration Pipeline` be split into smaller, more focused modules?**
-  _Cohesion score 0.07 - nodes in this community are weakly interconnected._
-- **Should `iOS Navigation & Detail View` be split into smaller, more focused modules?**
+  _74 weakly-connected nodes found - possible documentation gaps or missing edges._
+- **Should `Community 0` be split into smaller, more focused modules?**
   _Cohesion score 0.06 - nodes in this community are weakly interconnected._
-- **Should `Device Detail ViewModel & Locate` be split into smaller, more focused modules?**
-  _Cohesion score 0.09 - nodes in this community are weakly interconnected._
-- **Should `App Bootstrap & Delegates` be split into smaller, more focused modules?**
+- **Should `Community 1` be split into smaller, more focused modules?**
+  _Cohesion score 0.08 - nodes in this community are weakly interconnected._
+- **Should `Community 2` be split into smaller, more focused modules?**
   _Cohesion score 0.12 - nodes in this community are weakly interconnected._
+- **Should `Community 4` be split into smaller, more focused modules?**
+  _Cohesion score 0.14 - nodes in this community are weakly interconnected._
