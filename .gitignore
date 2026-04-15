@@ -17,9 +17,13 @@ android/*.iml
 android/.idea/
 android/captures/
 
+# ── Secrets — never commit real env files ──────────────
+*.env
+!*.env.example
+android/app/frontend.env
+
 # ── Backend ────────────────────────────────────────────
 backend/node_modules/
-backend/.env
 
 # ── OS junk ────────────────────────────────────────────
 .DS_Store
