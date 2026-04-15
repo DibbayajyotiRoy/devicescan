@@ -11,5 +11,6 @@ data class DeviceSummary(
     val macAddress: String? = null,
     val ipAddress: String? = null,
     val deviceType: String? = null,
-    val openPorts: String? = null  // Comma-separated port list for DB storage
+    val openPorts: String? = null,  // Comma-separated port list for DB storage
+    val networkId: String = "offline"
 )

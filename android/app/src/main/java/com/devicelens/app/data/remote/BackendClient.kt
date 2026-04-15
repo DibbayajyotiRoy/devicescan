@@ -51,33 +51,105 @@ class BackendClient @Inject constructor(
     fun getUserAvatar(): String? = prefs.getString(PREF_USER_AVATAR, null)
     fun isLoggedIn(): Boolean = getAccessToken() != null
 
-    suspend fun loginWithGoogle(idToken: String, localAvatarUrl: String? = null): Boolean = withContext(Dispatchers.IO) {
+    /**
+     * Result of a login attempt. Success carries nothing; Failure carries a human-readable
+     * message derived from the backend body or the exception type.
+     */
+    sealed class LoginResult {
+        object Success : LoginResult()
+        data class Failure(val message: String, val httpCode: Int = 0) : LoginResult()
+    }
+
+    suspend fun loginWithGoogle(idToken: String, localAvatarUrl: String? = null): LoginResult = withContext(Dispatchers.IO) {
+        if (baseUrl.isBlank()) {
+            return@withContext LoginResult.Failure("Backend URL not configured. Rebuild the app with BACKEND_API_URL set in frontend.env.")
+        }
         try {
-            val body = JSONObject().apply {
-                put("idToken", idToken)
+            val body = JSONObject().apply { put("idToken", idToken) }
+            // Use an extended timeout for the first auth hit — Render free-tier can cold-start 15-30s.
+            val result = postDetailed("$baseUrl/api/v1/auth/google", body, skipAuth = true, connectTimeoutMs = 30_000, readTimeoutMs = 30_000)
+
+            if (!result.ok) {
+                val msg = parseBackendError(result.body) ?: "HTTP ${result.code}: ${result.body?.take(200) ?: "no response body"}"
+                DebugLog.e(TAG, "Login failed (HTTP ${result.code}): $msg")
+                return@withContext LoginResult.Failure(msg, result.code)
             }
-            val json = post("$baseUrl/api/v1/auth/google", body, skipAuth = true) ?: return@withContext false
-            
+
+            val json = result.json ?: return@withContext LoginResult.Failure("Server returned empty response")
             val accessToken = json.optString("accessToken")
             val refreshToken = json.optString("refreshToken")
             val user = json.optJSONObject("user")
-            
-            if (accessToken.isNotEmpty()) {
-                prefs.edit().apply {
-                    putString(PREF_ACCESS_TOKEN, accessToken)
-                    putString(PREF_REFRESH_TOKEN, refreshToken)
-                    putString(PREF_USER_NAME, user?.optString("name"))
-                    putString(PREF_USER_EMAIL, user?.optString("email"))
-                    putString(PREF_USER_AVATAR, user?.optString("avatar_url") ?: localAvatarUrl)
-                    apply()
-                }
-                DebugLog.i(TAG, "Login successful for ${user?.optString("email")}")
-                return@withContext true
+
+            if (accessToken.isEmpty()) {
+                return@withContext LoginResult.Failure("Server response missing accessToken")
             }
-            false
+
+            prefs.edit().apply {
+                putString(PREF_ACCESS_TOKEN, accessToken)
+                putString(PREF_REFRESH_TOKEN, refreshToken)
+                putString(PREF_USER_NAME, user?.optString("name"))
+                putString(PREF_USER_EMAIL, user?.optString("email"))
+                putString(PREF_USER_AVATAR, user?.optString("pictureUrl")?.takeIf { it.isNotEmpty() && it != "null" } ?: localAvatarUrl)
+                apply()
+            }
+            DebugLog.i(TAG, "Login successful for ${user?.optString("email")}")
+            LoginResult.Success
+        } catch (e: java.net.SocketTimeoutException) {
+            DebugLog.e(TAG, "Login timeout: ${e.message}")
+            LoginResult.Failure("Server is waking up. Please tap Sign In again in a few seconds (Render free tier cold-starts take ~20s).")
+        } catch (e: java.net.UnknownHostException) {
+            DebugLog.e(TAG, "Login DNS error: ${e.message}")
+            LoginResult.Failure("Can't reach the server. Check your internet connection.")
         } catch (e: Exception) {
-            DebugLog.e(TAG, "Login failed: ${e.message}")
-            false
+            DebugLog.e(TAG, "Login failed: ${e.javaClass.simpleName}: ${e.message}")
+            LoginResult.Failure("Unexpected error: ${e.message ?: e.javaClass.simpleName}")
+        }
+    }
+
+    private fun parseBackendError(body: String?): String? {
+        if (body.isNullOrBlank()) return null
+        return try {
+            val json = JSONObject(body)
+            val error = json.optString("error", "").takeIf { it.isNotEmpty() }
+            val details = json.optString("details", "").takeIf { it.isNotEmpty() }
+            when {
+                error != null && details != null -> "$error — $details"
+                error != null -> error
+                else -> null
+            }
+        } catch (_: Exception) { null }
+    }
+
+    data class HttpResult(val ok: Boolean, val code: Int, val body: String?, val json: JSONObject?)
+
+    private fun postDetailed(
+        url: String,
+        body: JSONObject,
+        skipAuth: Boolean = false,
+        connectTimeoutMs: Int = 10_000,
+        readTimeoutMs: Int = 15_000
+    ): HttpResult {
+        val conn = URL(url).openConnection() as HttpURLConnection
+        conn.requestMethod = "POST"
+        conn.connectTimeout = connectTimeoutMs
+        conn.readTimeout = readTimeoutMs
+        conn.setRequestProperty("Content-Type", "application/json")
+        conn.setRequestProperty("Accept", "application/json")
+        if (!skipAuth) {
+            getAccessToken()?.let { conn.setRequestProperty("Authorization", "Bearer $it") }
+        }
+        conn.doOutput = true
+
+        try {
+            conn.outputStream.bufferedWriter().use { it.write(body.toString()) }
+            val code = conn.responseCode
+            val ok = code in 200..299
+            val stream = if (ok) conn.inputStream else conn.errorStream
+            val bodyStr = stream?.bufferedReader()?.use { it.readText() }
+            val json = bodyStr?.let { runCatching { JSONObject(it) }.getOrNull() }
+            return HttpResult(ok, code, bodyStr, json)
+        } finally {
+            conn.disconnect()
         }
     }
 
@@ -226,55 +298,33 @@ class BackendClient @Inject constructor(
     // ─── HTTP helpers ───────────────────────────────────────────────
 
     private fun post(url: String, body: JSONObject, skipAuth: Boolean = false): JSONObject? {
-        val conn = URL(url).openConnection() as HttpURLConnection
-        conn.requestMethod = "POST"
-        conn.connectTimeout = 5000
-        conn.readTimeout = 10000
-        conn.setRequestProperty("Content-Type", "application/json")
-        conn.setRequestProperty("Accept", "application/json")
-        
-        if (!skipAuth) {
-            getAccessToken()?.let {
-                conn.setRequestProperty("Authorization", "Bearer $it")
-            }
+        // Connect timeout bumped to 15s for Render cold starts; read timeout 20s for Google token verify.
+        val result = postDetailed(url, body, skipAuth, connectTimeoutMs = 15_000, readTimeoutMs = 20_000)
+        if (!result.ok) {
+            DebugLog.w(TAG, "POST $url → ${result.code} body=${result.body?.take(300)}")
+            return null
         }
-        
-        conn.doOutput = true
-
-        try {
-            conn.outputStream.bufferedWriter().use { it.write(body.toString()) }
-
-            if (conn.responseCode !in 200..299) {
-                DebugLog.w(TAG, "POST $url → ${conn.responseCode}")
-                return null
-            }
-
-            val response = conn.inputStream.bufferedReader().use { it.readText() }
-            return JSONObject(response)
-        } finally {
-            conn.disconnect()
-        }
+        return result.json
     }
 
     private fun get(url: String): JSONObject? {
         val conn = URL(url).openConnection() as HttpURLConnection
         conn.requestMethod = "GET"
-        conn.connectTimeout = 5000
-        conn.readTimeout = 5000
+        conn.connectTimeout = 15_000
+        conn.readTimeout = 15_000
         conn.setRequestProperty("Accept", "application/json")
-        
-        getAccessToken()?.let {
-            conn.setRequestProperty("Authorization", "Bearer $it")
-        }
+        getAccessToken()?.let { conn.setRequestProperty("Authorization", "Bearer $it") }
 
         try {
-            if (conn.responseCode !in 200..299) {
-                DebugLog.w(TAG, "GET $url → ${conn.responseCode}")
+            val code = conn.responseCode
+            val ok = code in 200..299
+            val stream = if (ok) conn.inputStream else conn.errorStream
+            val body = stream?.bufferedReader()?.use { it.readText() }
+            if (!ok) {
+                DebugLog.w(TAG, "GET $url → $code body=${body?.take(300)}")
                 return null
             }
-
-            val response = conn.inputStream.bufferedReader().use { it.readText() }
-            return JSONObject(response)
+            return body?.let { runCatching { JSONObject(it) }.getOrNull() }
         } finally {
             conn.disconnect()
         }

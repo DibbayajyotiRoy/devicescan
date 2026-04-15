@@ -7,6 +7,10 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.location.LocationManager
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkRequest
+import android.net.NetworkCapabilities
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.preferencesDataStore
@@ -18,6 +22,7 @@ import com.devicelens.app.data.remote.BackendClient
 import com.devicelens.app.domain.model.OverallStatus
 import com.devicelens.app.domain.orchestration.ScanOrchestrator
 import com.devicelens.app.helpers.DebugLog
+import com.devicelens.app.helpers.NetworkIdentifier
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
@@ -34,7 +39,8 @@ class StatusViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val scanOrchestrator: ScanOrchestrator,
     private val deviceRepository: DeviceRepository,
-    private val backendClient: BackendClient
+    private val backendClient: BackendClient,
+    private val networkIdentifier: NetworkIdentifier
 ) : ViewModel() {
 
     private val TAG = "StatusVM"
@@ -47,7 +53,14 @@ class StatusViewModel @Inject constructor(
 
     val scanPhase: StateFlow<String> = scanOrchestrator.scanPhase
 
-    val devices: StateFlow<List<DeviceEntity>> = deviceRepository.observeAll()
+    // Tracks the current Wi-Fi network. When it flips (user moves home↔office)
+    // the devices flow below re-binds to the new network's rows.
+    private val _currentNetworkId = MutableStateFlow(networkIdentifier.current())
+    val currentNetworkId: StateFlow<String> = _currentNetworkId
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    val devices: StateFlow<List<DeviceEntity>> = _currentNetworkId
+        .flatMapLatest { networkId: String -> deviceRepository.observeByNetwork(networkId) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val safeCount: StateFlow<Int> = devices
@@ -87,6 +100,36 @@ class StatusViewModel @Inject constructor(
         override fun onReceive(ctx: Context?, intent: Intent?) {
             DebugLog.i(TAG, "Hardware state changed: ${intent?.action}")
             checkHardwareStatus()
+            // Hardware change can mean Wi-Fi flipped on/off — re-resolve networkId.
+            refreshNetworkId()
+        }
+    }
+
+    private val connectivityManager =
+        context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+
+    private val networkCallback = object : ConnectivityManager.NetworkCallback() {
+        override fun onAvailable(network: Network) {
+            DebugLog.i(TAG, "Network available — refreshing networkId")
+            refreshNetworkId()
+        }
+        override fun onLost(network: Network) {
+            DebugLog.i(TAG, "Network lost — refreshing networkId")
+            refreshNetworkId()
+        }
+        override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
+            // BSSID can change on roaming even when "still on Wi-Fi" — re-check.
+            refreshNetworkId()
+        }
+    }
+
+    private fun refreshNetworkId() {
+        val newId = networkIdentifier.current()
+        if (newId != _currentNetworkId.value) {
+            DebugLog.i(TAG, "networkId changed: ${_currentNetworkId.value} -> $newId")
+            _currentNetworkId.value = newId
+            // Wipe transient status — the previous status was for a different network.
+            _overallStatus.value = OverallStatus.NOT_CALIBRATED
         }
     }
 
@@ -98,6 +141,16 @@ class StatusViewModel @Inject constructor(
             addAction(LocationManager.PROVIDERS_CHANGED_ACTION)
         }
         context.registerReceiver(hardwareReceiver, filter)
+
+        // Listen for any network transport change (Wi-Fi handover, switch SSIDs, etc.)
+        try {
+            val request = NetworkRequest.Builder()
+                .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+                .build()
+            connectivityManager?.registerNetworkCallback(request, networkCallback)
+        } catch (e: Exception) {
+            DebugLog.w(TAG, "Failed to register network callback: ${e.message}")
+        }
 
         viewModelScope.launch {
             context.dataStore.data.collect { prefs ->
@@ -213,8 +266,7 @@ class StatusViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
-        try {
-            context.unregisterReceiver(hardwareReceiver)
-        } catch (_: Exception) { }
+        try { context.unregisterReceiver(hardwareReceiver) } catch (_: Exception) { }
+        try { connectivityManager?.unregisterNetworkCallback(networkCallback) } catch (_: Exception) { }
     }
 }

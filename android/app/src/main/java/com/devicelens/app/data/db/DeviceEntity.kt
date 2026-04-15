@@ -52,5 +52,14 @@ data class DeviceEntity(
     val deviceType: String = "",
 
     @ColumnInfo(name = "open_ports", defaultValue = "")
-    val openPorts: String = ""
+    val openPorts: String = "",
+
+    /**
+     * Identifier for the network this device was seen on (e.g. Wi-Fi BSSID).
+     * Defaults to "offline" when no Wi-Fi/network context exists (e.g. pure BLE scan).
+     * This is the primary scope — queries filter by it so devices from a previous
+     * location do not bleed into the current one.
+     */
+    @ColumnInfo(name = "network_id", index = true, defaultValue = "offline")
+    val networkId: String = "offline"
 )

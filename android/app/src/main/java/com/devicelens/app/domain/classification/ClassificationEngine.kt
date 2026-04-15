@@ -21,7 +21,8 @@ class ClassificationEngine @Inject constructor(
         wifiDevices: List<RawDevice>,
         bleResult: BleScanner.BleScanResult,
         magReading: MagnetometerMonitor.MagnetometerReading,
-        existingDevices: List<DeviceEntity>
+        existingDevices: List<DeviceEntity>,
+        networkId: String
     ): List<DeviceSummary> {
         val allRaw = mutableListOf<RawDevice>()
         allRaw.addAll(wifiDevices)
@@ -38,14 +39,15 @@ class ClassificationEngine @Inject constructor(
             )
         }
 
-        return classifyAll(allRaw, magReading, existingDevices)
+        return classifyAll(allRaw, magReading, existingDevices, networkId)
     }
 
     fun classify(
         wifiResult: WifiScanner.WifiScanResult,
         bleResult: BleScanner.BleScanResult,
         magReading: MagnetometerMonitor.MagnetometerReading,
-        existingDevices: List<DeviceEntity>
+        existingDevices: List<DeviceEntity>,
+        networkId: String
     ): List<DeviceSummary> {
         val allRaw = mutableListOf<RawDevice>()
 
@@ -74,16 +76,17 @@ class ClassificationEngine @Inject constructor(
             )
         }
 
-        return classifyAll(allRaw, magReading, existingDevices)
+        return classifyAll(allRaw, magReading, existingDevices, networkId)
     }
 
     private fun classifyAll(
         allRaw: List<RawDevice>,
         magReading: MagnetometerMonitor.MagnetometerReading,
-        existingDevices: List<DeviceEntity>
+        existingDevices: List<DeviceEntity>,
+        networkId: String
     ): List<DeviceSummary> {
         return allRaw.map { raw ->
-            val compositeKey = buildCompositeKey(raw.name, raw.vendor, raw.method, raw.mac)
+            val compositeKey = buildCompositeKey(raw.name, raw.vendor, raw.method, raw.mac, networkId)
             val existing = existingDevices.find { it.compositeKey == compositeKey }
 
             val seenCount = (existing?.seenCount ?: 0) + 1
@@ -113,7 +116,8 @@ class ClassificationEngine @Inject constructor(
                 macAddress = raw.mac,
                 ipAddress = raw.ipAddress,
                 deviceType = raw.deviceType,
-                openPorts = raw.openPorts?.joinToString(",")
+                openPorts = raw.openPorts?.joinToString(","),
+                networkId = networkId
             )
         }
     }
@@ -170,8 +174,10 @@ class ClassificationEngine @Inject constructor(
     }
 
     companion object {
-        fun buildCompositeKey(name: String, vendor: String, method: String, id: String?): String {
-            val input = "${name.lowercase().trim()}$vendor$method${id ?: ""}"
+        fun buildCompositeKey(name: String, vendor: String, method: String, id: String?, networkId: String): String {
+            // networkId first so rehashing lands in a different bucket when the user
+            // moves networks — the whole point of this scoping change.
+            val input = "$networkId|${name.lowercase().trim()}|$vendor|$method|${id ?: ""}"
             val digest = MessageDigest.getInstance("SHA-256").digest(input.toByteArray())
             return digest.joinToString("") { "%02x".format(it) }.take(16)
         }

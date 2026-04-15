@@ -55,15 +55,14 @@ class SettingsViewModel @Inject constructor(
 
     fun handleGoogleSignInResult(intent: android.content.Intent?) {
         if (intent == null) {
-            _loginError.value = "Sign-in was cancelled"
+            // User cancelled the picker — silent reset, not an error.
             return
         }
         val task = com.google.android.gms.auth.api.signin.GoogleSignIn.getSignedInAccountFromIntent(intent)
-        val idToken = googleAuthManager.handleSignInResult(task)
-        if (idToken != null) {
-            loginWithBackend(idToken)
-        } else {
-            _loginError.value = "Google Sign-In failed — please try again"
+        when (val outcome = googleAuthManager.handleSignInResultDetailed(task)) {
+            is GoogleAuthManager.SignInOutcome.Success -> loginWithBackend(outcome.idToken)
+            is GoogleAuthManager.SignInOutcome.Cancelled -> Unit
+            is GoogleAuthManager.SignInOutcome.Failure -> _loginError.value = outcome.message
         }
     }
 
@@ -73,13 +72,15 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             _isLoggingIn.value = true
             _loginError.value = null
-            val success = backendClient.loginWithGoogle(idToken)
-            if (success) {
-                _isLoggedIn.value = true
-                _userName.value = backendClient.getUserName()
-                _userEmail.value = backendClient.getUserEmail()
-            } else {
-                _loginError.value = "Could not connect to server — check your internet"
+            when (val result = backendClient.loginWithGoogle(idToken)) {
+                is BackendClient.LoginResult.Success -> {
+                    _isLoggedIn.value = true
+                    _userName.value = backendClient.getUserName()
+                    _userEmail.value = backendClient.getUserEmail()
+                }
+                is BackendClient.LoginResult.Failure -> {
+                    _loginError.value = result.message
+                }
             }
             _isLoggingIn.value = false
         }

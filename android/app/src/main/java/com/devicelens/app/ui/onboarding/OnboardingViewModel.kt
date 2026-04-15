@@ -29,20 +29,33 @@ class OnboardingViewModel @Inject constructor(
     fun handleSignInResult(task: Task<GoogleSignInAccount>, onComplete: () -> Unit) {
         viewModelScope.launch {
             _uiState.value = OnboardingUiState.Loading
-            val idToken = googleAuthManager.handleSignInResult(task)
-            
-            if (idToken != null) {
-                val success = backendClient.loginWithGoogle(idToken)
-                if (success) {
-                    _uiState.value = OnboardingUiState.Success
-                    onComplete()
-                } else {
-                    _uiState.value = OnboardingUiState.Error("Backend authentication failed")
+            val signInOutcome = googleAuthManager.handleSignInResultDetailed(task)
+            when (signInOutcome) {
+                is GoogleAuthManager.SignInOutcome.Success -> {
+                    val result = backendClient.loginWithGoogle(signInOutcome.idToken)
+                    when (result) {
+                        is BackendClient.LoginResult.Success -> {
+                            _uiState.value = OnboardingUiState.Success
+                            onComplete()
+                        }
+                        is BackendClient.LoginResult.Failure -> {
+                            DebugLog.w(TAG, "Backend login failed: ${result.message} (http=${result.httpCode})")
+                            _uiState.value = OnboardingUiState.Error(result.message)
+                        }
+                    }
                 }
-            } else {
-                _uiState.value = OnboardingUiState.Error("Google Sign-In failed")
+                is GoogleAuthManager.SignInOutcome.Cancelled -> {
+                    _uiState.value = OnboardingUiState.Idle
+                }
+                is GoogleAuthManager.SignInOutcome.Failure -> {
+                    _uiState.value = OnboardingUiState.Error(signInOutcome.message)
+                }
             }
         }
+    }
+
+    fun onSignInCancelled() {
+        _uiState.value = OnboardingUiState.Idle
     }
 }
 

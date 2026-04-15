@@ -13,7 +13,16 @@ class DeviceRepository @Inject constructor(
 ) {
     fun observeAll(): Flow<List<DeviceEntity>> = deviceDao.observeAll()
 
+    fun observeByNetwork(networkId: String): Flow<List<DeviceEntity>> =
+        deviceDao.observeByNetwork(networkId)
+
     suspend fun getAll(): List<DeviceEntity> = deviceDao.getAll()
+
+    suspend fun getAllByNetwork(networkId: String): List<DeviceEntity> =
+        deviceDao.getAllByNetwork(networkId)
+
+    suspend fun pruneStaleForNetwork(networkId: String, cutoffMs: Long) =
+        deviceDao.pruneStaleForNetwork(networkId, cutoffMs)
 
     suspend fun findById(id: Long): DeviceEntity? = deviceDao.findById(id)
 
@@ -37,7 +46,8 @@ class DeviceRepository @Inject constructor(
                         macAddress = device.macAddress ?: existing.macAddress,
                         ipAddress = device.ipAddress ?: existing.ipAddress,
                         deviceType = if (!device.deviceType.isNullOrBlank()) device.deviceType else existing.deviceType,
-                        openPorts = if (!device.openPorts.isNullOrBlank()) device.openPorts else existing.openPorts
+                        openPorts = if (!device.openPorts.isNullOrBlank()) device.openPorts else existing.openPorts,
+                        networkId = device.networkId
                     )
                 )
             } else {
@@ -57,7 +67,8 @@ class DeviceRepository @Inject constructor(
                         macAddress = device.macAddress,
                         ipAddress = device.ipAddress,
                         deviceType = device.deviceType ?: "",
-                        openPorts = device.openPorts ?: ""
+                        openPorts = device.openPorts ?: "",
+                        networkId = device.networkId
                     )
                 )
             }

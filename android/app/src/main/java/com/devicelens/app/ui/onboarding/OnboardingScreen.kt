@@ -64,10 +64,15 @@ fun OnboardingScreen(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
         val data = result.data
-        if (data != null) {
-            val task = com.google.android.gms.auth.api.signin.GoogleSignIn.getSignedInAccountFromIntent(data)
-            viewModel.handleSignInResult(task, onComplete)
+        if (data == null) {
+            // User backed out of the Google account picker — reset UI, no error toast.
+            viewModel.onSignInCancelled()
+            return@rememberLauncherForActivityResult
         }
+        // Always hand off to the task parser — it distinguishes cancel vs failure and
+        // emits the correct UI state (including ApiException status codes).
+        val task = com.google.android.gms.auth.api.signin.GoogleSignIn.getSignedInAccountFromIntent(data)
+        viewModel.handleSignInResult(task, onComplete)
     }
 
     Box(

@@ -12,6 +12,7 @@ import com.devicelens.app.domain.scanner.DeviceFingerprinter
 import com.devicelens.app.domain.scanner.MagnetometerMonitor
 import com.devicelens.app.domain.scanner.WifiScanner
 import com.devicelens.app.helpers.DebugLog
+import com.devicelens.app.helpers.NetworkIdentifier
 import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -33,7 +34,8 @@ class ScanOrchestrator @Inject constructor(
     private val classificationEngine: ClassificationEngine,
     private val deviceRepository: DeviceRepository,
     private val fingerprinter: DeviceFingerprinter,
-    private val backendClient: BackendClient
+    private val backendClient: BackendClient,
+    private val networkIdentifier: NetworkIdentifier
 ) {
     private val TAG = "ScanOrchestrator"
     private val scanMutex = Mutex()
@@ -49,28 +51,30 @@ class ScanOrchestrator @Inject constructor(
 
     suspend fun runScan(): ScanResult = scanMutex.withLock {
         stopScanners()
-        DebugLog.i(TAG, "=== SCAN STARTED ===")
+        val networkId = networkIdentifier.current()
+        DebugLog.i(TAG, "=== SCAN STARTED === networkId=$networkId")
 
-        return@withLock try { withTimeout(15_000) { runScanInternal() } }
+        return@withLock try { withTimeout(15_000) { runScanInternal(networkId) } }
         catch (e: kotlinx.coroutines.TimeoutCancellationException) {
-            DebugLog.w(TAG, "Scan hit 15s hard cap — returning partial results")
-            val existing = deviceRepository.getAll()
+            // CRITICAL: do NOT surface the persisted DB as the "scan result".
+            // Previously this code returned deviceRepository.getAll(), which is how
+            // users saw stale devices from their home network while at the office.
+            // The correct behavior is to report that the scan failed to complete.
+            DebugLog.w(TAG, "Scan hit 15s hard cap — reporting as incomplete (not surfacing cached DB)")
+            _scanPhase.value = ""
             ScanResult(
-                totalDetected = existing.size,
-                safeCount = existing.count { it.riskLevel == "SAFE" },
-                unknownCount = existing.count { it.riskLevel == "UNKNOWN" },
-                suspiciousCount = existing.count { it.riskLevel == "SUSPICIOUS" },
-                overallStatus = when {
-                    existing.any { it.riskLevel == "SUSPICIOUS" } -> OverallStatus.RISK
-                    existing.any { it.riskLevel == "UNKNOWN" } -> OverallStatus.WARNING
-                    else -> OverallStatus.SAFE
-                },
+                totalDetected = 0,
+                safeCount = 0,
+                unknownCount = 0,
+                suspiciousCount = 0,
+                overallStatus = OverallStatus.NOT_CALIBRATED,
                 permissionsPartial = true
             )
         }
     }
 
-    private suspend fun runScanInternal(): ScanResult {
+    private suspend fun runScanInternal(networkId: String): ScanResult {
+        val scanStartMs = System.currentTimeMillis()
         val (wifi, ble, mag) = supervisorScope {
             _scanPhase.value = "Initializing Wi-Fi discovery…"
             val wifiDeferred = async(Dispatchers.IO) {
@@ -154,10 +158,12 @@ class ScanOrchestrator @Inject constructor(
             )
         }
 
-        // Phase 4: Classify
+        // Phase 4: Classify — scope "existing" to the CURRENT network only.
+        // Classification uses seenCount/firstSeen/existingRisk for its heuristics, so
+        // mixing networks would carry home-network trust into the office etc.
         _scanPhase.value = "Analysing signals…"
-        val existing = deviceRepository.getAll()
-        val classified = classificationEngine.classifyRaw(enrichedWifiDevices, ble, mag, existing)
+        val existing = deviceRepository.getAllByNetwork(networkId)
+        val classified = classificationEngine.classifyRaw(enrichedWifiDevices, ble, mag, existing, networkId)
         
         DebugLog.i(TAG, "Classified: ${classified.size} devices → " +
             "SAFE=${classified.count { it.riskLevel == "SAFE" }} " +
@@ -220,6 +226,7 @@ class ScanOrchestrator @Inject constructor(
                         
                         // Update the final list to be saved
                         deviceRepository.upsertAll(enrichedList)
+                        deviceRepository.pruneStaleForNetwork(networkId, scanStartMs)
                         
                         // Update results with enriched data
                         val result = ScanResult(
@@ -245,6 +252,10 @@ class ScanOrchestrator @Inject constructor(
 
         // Fallback or if backend disabled
         deviceRepository.upsertAll(classified)
+        // Drop devices on this network that were not refreshed by THIS scan
+        // (their lastSeen is older than scanStart). Keeps the list from growing
+        // forever with ghosts of devices that left the network.
+        deviceRepository.pruneStaleForNetwork(networkId, scanStartMs)
         _scanPhase.value = ""
 
         val result = ScanResult(
