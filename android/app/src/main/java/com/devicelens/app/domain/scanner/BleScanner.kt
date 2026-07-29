@@ -12,6 +12,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import kotlin.coroutines.resume
 
@@ -36,6 +37,27 @@ class BleScanner @Inject constructor(
     )
 
     @Volatile private var activeCallback: ScanCallback? = null
+
+    // BLE advertisers use randomised MACs, so OUI lookup almost always fails.
+    // The 16-bit company identifier in the manufacturer-specific advertising data
+    // is the one reliable vendor signal that survives MAC randomisation.
+    private val bleCompanyNames = mapOf(
+        0x004C to "Apple",
+        0x0006 to "Microsoft",
+        0x00E0 to "Google",
+        0x0075 to "Samsung",
+        0x0087 to "Garmin",
+        0x0171 to "Amazon",
+        0x0157 to "Xiaomi",
+        0x0059 to "Nordic Semiconductor",
+        0x000D to "Texas Instruments",
+        0x000F to "Broadcom"
+    )
+
+    private fun bleCompanyVendor(msd: android.util.SparseArray<ByteArray>?): String? {
+        if (msd == null || msd.size() == 0) return null
+        return bleCompanyNames[msd.keyAt(0)]
+    }
 
     suspend fun scan(durationMs: Long = 8000): BleScanResult = scanMutex.withLock {
         DebugLog.i(TAG, "Starting BLE scan (duration: ${durationMs}ms)…")
@@ -65,6 +87,33 @@ class BleScanner @Inject constructor(
                     .setScanMode(ScanSettings.SCAN_MODE_BALANCED)
                     .build()
 
+                // The continuation can be reached from three different threads:
+                // the scan-result/failure callback (binder thread), the duration
+                // timer, and external cancellation. Resuming twice throws
+                // "Already resumed" on a thread outside every try/catch and kills
+                // the process — this is the re-scan crash. Guard with a single
+                // atomic latch so at most one resume ever fires.
+                val resumed = AtomicBoolean(false)
+
+                val cleanup = {
+                    val cb = activeCallback
+                    activeCallback = null
+                    if (cb != null) {
+                        try {
+                            scanner.stopScan(cb)
+                        } catch (e: Exception) {
+                            DebugLog.w(TAG, "Error stopping BLE scan: ${e.message}")
+                        }
+                    }
+                }
+
+                val resumeOnce = { result: BleScanResult ->
+                    if (resumed.compareAndSet(false, true)) {
+                        cleanup()
+                        if (continuation.isActive) continuation.resume(result)
+                    }
+                }
+
                 val callback = object : ScanCallback() {
                     override fun onScanResult(callbackType: Int, result: ScanResult) {
                         val device = result.device
@@ -74,9 +123,13 @@ class BleScanner @Inject constructor(
                             null
                         }
                         val address = device.address
-                        val vendor = ouiLookup.lookup(address)
+                        val ouiVendor = ouiLookup.lookup(address)
+                        // Fall back to the BLE manufacturer company-id when the
+                        // (usually randomised) MAC isn't in the OUI table.
+                        val vendor = if (ouiVendor != "Unknown") ouiVendor
+                            else bleCompanyVendor(result.scanRecord?.manufacturerSpecificData) ?: "Unknown"
                         val isNew = !results.containsKey(address)
-                        
+
                         results[address] = BleDevice(
                             address = address,
                             name = name,
@@ -90,9 +143,7 @@ class BleScanner @Inject constructor(
 
                     override fun onScanFailed(errorCode: Int) {
                         DebugLog.e(TAG, "BLE onScanFailed errorCode=$errorCode")
-                        if (continuation.isActive) {
-                            continuation.resume(BleScanResult(results.values.toList(), false))
-                        }
+                        resumeOnce(BleScanResult(results.values.toList(), false))
                     }
                 }
 
@@ -102,28 +153,14 @@ class BleScanner @Inject constructor(
                     DebugLog.i(TAG, "BLE startScan() called successfully")
                 } catch (e: Exception) {
                     DebugLog.e(TAG, "Failed to start BLE scan: ${e.message}")
-                    if (continuation.isActive) {
-                        continuation.resume(BleScanResult(emptyList(), false))
-                    }
+                    resumeOnce(BleScanResult(emptyList(), false))
                     return@suspendCancellableCoroutine
-                }
-
-                val cleanup = {
-                    activeCallback = null
-                    try {
-                        scanner.stopScan(callback)
-                    } catch (e: Exception) {
-                        DebugLog.w(TAG, "Error stopping BLE scan: ${e.message}")
-                    }
                 }
 
                 val timerJob = launch {
                     delay(durationMs)
-                    if (continuation.isActive) {
-                        cleanup()
-                        DebugLog.i(TAG, "BLE scan duration reached → ${results.size} devices")
-                        continuation.resume(BleScanResult(results.values.toList(), true))
-                    }
+                    DebugLog.i(TAG, "BLE scan duration reached → ${results.size} devices")
+                    resumeOnce(BleScanResult(results.values.toList(), true))
                 }
 
                 continuation.invokeOnCancellation {

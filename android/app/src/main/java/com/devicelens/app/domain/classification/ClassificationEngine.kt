@@ -6,12 +6,32 @@ import com.devicelens.app.domain.model.RawDevice
 import com.devicelens.app.domain.scanner.BleScanner
 import com.devicelens.app.domain.scanner.MagnetometerMonitor
 import com.devicelens.app.domain.scanner.WifiScanner
+import com.devicelens.app.helpers.DeviceTypeInferrer
 import java.security.MessageDigest
 import javax.inject.Inject
 
 class ClassificationEngine @Inject constructor(
-    private val ouiLookup: OuiLookup
+    private val ouiLookup: OuiLookup,
+    private val deviceTypeInferrer: DeviceTypeInferrer
 ) {
+    /**
+     * Maps the name/vendor heuristic to a short, human-readable type label.
+     * Returns null when nothing can be inferred so callers can keep any
+     * stronger type that the network fingerprinter already produced.
+     */
+    private fun inferTypeLabel(name: String, vendor: String): String? =
+        when (deviceTypeInferrer.infer(name, vendor)) {
+            DeviceTypeInferrer.DeviceType.ROUTER -> "Router"
+            DeviceTypeInferrer.DeviceType.PHONE -> "Phone"
+            DeviceTypeInferrer.DeviceType.COMPUTER -> "Computer"
+            DeviceTypeInferrer.DeviceType.TV -> "TV"
+            DeviceTypeInferrer.DeviceType.SPEAKER -> "Speaker"
+            DeviceTypeInferrer.DeviceType.WEARABLE -> "Wearable"
+            DeviceTypeInferrer.DeviceType.IOT -> "IoT Device"
+            DeviceTypeInferrer.DeviceType.CAMERA -> "Camera"
+            DeviceTypeInferrer.DeviceType.UNKNOWN -> null
+        }
+
     fun lookupVendor(mac: String): String? {
         val v = ouiLookup.lookup(mac)
         return if (v == "Unknown") null else v
@@ -28,10 +48,14 @@ class ClassificationEngine @Inject constructor(
         allRaw.addAll(wifiDevices)
 
         bleResult.devices.forEach {
+            val vendor = if (it.vendor != "Unknown") it.vendor else lookupVendor(it.address) ?: "Unknown"
+            // Most BLE advertisers broadcast no name. Fall back to the resolved
+            // vendor ("Apple device") rather than a meaningless "Unknown Device".
+            val name = it.name ?: if (vendor != "Unknown") "$vendor device" else "Bluetooth device"
             allRaw.add(
                 RawDevice(
-                    name = it.name ?: "Unknown Device",
-                    vendor = if (it.vendor != "Unknown") it.vendor else lookupVendor(it.address) ?: "Unknown",
+                    name = name,
+                    vendor = vendor,
                     method = "BLE",
                     rssi = it.rssi,
                     mac = it.address
@@ -89,19 +113,19 @@ class ClassificationEngine @Inject constructor(
             val compositeKey = buildCompositeKey(raw.name, raw.vendor, raw.method, raw.mac, networkId)
             val existing = existingDevices.find { it.compositeKey == compositeKey }
 
-            val seenCount = (existing?.seenCount ?: 0) + 1
-            val firstSeen = existing?.firstSeen ?: System.currentTimeMillis()
             val isTrusted = existing?.isTrustedByUser ?: false
+
+            // Keep any strong type the network fingerprinter already produced;
+            // otherwise (BLE devices, silent Wi-Fi hosts) fall back to the
+            // name/vendor heuristic so the row still gets a meaningful type.
+            val resolvedType = raw.deviceType?.takeIf { it.isNotBlank() && it != "Unknown" }
+                ?: inferTypeLabel(raw.name, raw.vendor)
 
             val risk = computeRisk(
                 isTrustedByUser = isTrusted,
-                seenCount = seenCount,
-                firstSeenMs = firstSeen,
-                rssi = raw.rssi,
-                vendor = raw.vendor,
                 magnetometerAnomaly = magReading.anomalyDetected,
                 existingRisk = existing?.riskLevel,
-                deviceType = raw.deviceType,
+                deviceType = resolvedType,
                 openPorts = raw.openPorts
             )
 
@@ -115,7 +139,7 @@ class ClassificationEngine @Inject constructor(
                 isTrustedByUser = isTrusted,
                 macAddress = raw.mac,
                 ipAddress = raw.ipAddress,
-                deviceType = raw.deviceType,
+                deviceType = resolvedType,
                 openPorts = raw.openPorts?.joinToString(","),
                 networkId = networkId
             )
@@ -127,10 +151,6 @@ class ClassificationEngine @Inject constructor(
      */
     private fun computeRisk(
         isTrustedByUser: Boolean,
-        seenCount: Int,
-        firstSeenMs: Long,
-        rssi: Int?,
-        vendor: String,
         magnetometerAnomaly: Boolean,
         existingRisk: String?,
         deviceType: String?,
@@ -160,16 +180,15 @@ class ClassificationEngine @Inject constructor(
         // Spy camera-specific ports → SUSPICIOUS
         if (openPorts != null && openPorts.any { it in listOf(34567, 37777, 9527) }) return "SUSPICIOUS"
 
-        // Cloud device with no services → could be anything hidden
-        if ("cloud" in type) return "SUSPICIOUS"
-
         // EMF anomaly → potential hidden electronics
         if (magnetometerAnomaly) return "SUSPICIOUS"
 
-        // First-time device with strong signal and unknown vendor
-        if (seenCount == 1 && (rssi ?: -100) > -60 && vendor == "Unknown")
-            return "SUSPICIOUS"
-
+        // NOTE: we deliberately do NOT flag "first-seen + strong signal + unknown
+        // vendor" as SUSPICIOUS. BLE devices almost always have a randomised MAC
+        // (unknown vendor) and you are physically near them, so that rule turned
+        // every pair of earbuds and every neighbour's phone red on the first scan.
+        // Unidentified devices surface as UNKNOWN (amber) until corroborated by a
+        // real threat signal above or trusted by the user.
         return "UNKNOWN"
     }
 

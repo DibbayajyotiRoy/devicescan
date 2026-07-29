@@ -5,6 +5,8 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -34,6 +36,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -131,10 +136,35 @@ fun StatusScreen(
             )
         },
         floatingActionButton = {
+            val haptics = LocalHapticFeedback.current
+            // Continuous spin while scanning so the button reads as "working",
+            // not frozen. A fast rotation (800ms) makes the scan feel quicker.
+            val spin = rememberInfiniteTransition(label = "fabSpin")
+            val rotation by spin.animateFloat(
+                initialValue = 0f,
+                targetValue = 360f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(800, easing = LinearEasing)
+                ),
+                label = "fabRotation"
+            )
             ExtendedFloatingActionButton(
-                onClick = { viewModel.restartScan() },
-                icon = { Icon(Icons.Rounded.Refresh, contentDescription = null) },
-                text = { Text("Scan environment") },
+                onClick = {
+                    if (!isScanning) {
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        viewModel.restartScan()
+                    }
+                },
+                icon = {
+                    Icon(
+                        Icons.Rounded.Refresh,
+                        contentDescription = null,
+                        modifier = if (isScanning) {
+                            Modifier.graphicsLayer { rotationZ = rotation }
+                        } else Modifier
+                    )
+                },
+                text = { Text(if (isScanning) "Scanning…" else "Scan environment") },
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
                 expanded = !isScanning,
@@ -303,6 +333,17 @@ fun StatusScreen(
                         label = "pulseScale"
                     )
 
+                    // The CTA below was decorative — wire it to actually scan,
+                    // with press-scale + haptic so it feels like a real button.
+                    val haptics = LocalHapticFeedback.current
+                    val ctaInteraction = remember { MutableInteractionSource() }
+                    val ctaPressed by ctaInteraction.collectIsPressedAsState()
+                    val ctaScale by animateFloatAsState(
+                        targetValue = if (ctaPressed) 0.96f else 1f,
+                        animationSpec = tween(100),
+                        label = "ctaScale"
+                    )
+
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -343,7 +384,17 @@ fun StatusScreen(
                         Spacer(modifier = Modifier.height(16.dp))
                         Surface(
                             color = MaterialTheme.colorScheme.primaryContainer,
-                            shape = RoundedCornerShape(12.dp)
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .scale(ctaScale)
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable(
+                                    interactionSource = ctaInteraction,
+                                    indication = null
+                                ) {
+                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    viewModel.restartScan()
+                                }
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
@@ -661,12 +712,25 @@ private fun RiskAlertCard(
         label = "riskGlow"
     )
 
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val pressScale by animateFloatAsState(
+        targetValue = if (isPressed) 0.98f else 1f,
+        animationSpec = tween(100),
+        label = "riskPressScale"
+    )
+
     Box(
         modifier = modifier
+            .scale(pressScale)
             .clip(ShapeLarge)
             .background(riskColor.copy(alpha = 0.15f))
             .padding(1.dp)
-            .clickable(onClick = onClick)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            )
     ) {
         Box(
             modifier = Modifier

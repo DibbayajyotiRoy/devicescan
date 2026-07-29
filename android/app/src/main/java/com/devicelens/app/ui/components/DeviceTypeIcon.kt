@@ -79,7 +79,7 @@ private fun detectDeviceIcon(deviceName: String, vendor: String, deviceType: Str
 
     return when {
         type.contains("camera") || type.contains("cam") -> Icons.Rounded.Videocam
-        type.contains("phone") || type.contains("smartphone") -> Icons.Rounded.Smartphone
+        type.contains("phone") || type.contains("smartphone") || type.contains("mobile") -> Icons.Rounded.Smartphone
         type.contains("tablet") || type.contains("ipad") -> Icons.Rounded.Tablet
         type.contains("computer") || type.contains("laptop") || type.contains("desktop") -> Icons.Rounded.Computer
         type.contains("router") || type.contains("gateway") || type.contains("modem") -> Icons.Rounded.Router

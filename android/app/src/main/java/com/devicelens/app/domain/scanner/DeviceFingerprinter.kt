@@ -404,7 +404,11 @@ class DeviceFingerprinter @Inject constructor() {
         if (openPorts.isNotEmpty()) return "📡 Network Device"
 
         // ── Nothing exposed ──
-        return "☁️ Mobile Device (limited visibility)"
+        // A host that answers ping/connect but exposes no port could be anything
+        // (a firewalled phone, laptop, console…). Returning "Unknown" lets the
+        // name/vendor heuristic in ClassificationEngine take over instead of
+        // guessing "Mobile Device" and mislabelling it.
+        return "Unknown"
     }
 
     private val garbageNames = setOf(
