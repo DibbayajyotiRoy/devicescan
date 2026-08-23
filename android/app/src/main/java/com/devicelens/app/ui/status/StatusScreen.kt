@@ -59,6 +59,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.devicelens.app.domain.model.OverallStatus
+import com.devicelens.app.domain.model.RangeFilter
 import com.devicelens.app.ui.components.DeviceRow
 import com.devicelens.app.ui.components.NetworkAlertCard
 import com.devicelens.app.ui.components.ScrollEdgeFade
@@ -91,6 +92,7 @@ import kotlinx.coroutines.flow.StateFlow
 @Composable
 fun StatusScreen(
     onDeviceClick: (Long) -> Unit,
+    onLocateDevice: (Long) -> Unit,
     onNavigateToSetup: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenDebugLog: () -> Unit,
@@ -119,6 +121,9 @@ fun StatusScreen(
     val kindFilter by viewModel.kindFilter.collectAsStateSafe()
     val availableKinds by viewModel.availableKinds.collectAsStateSafe()
     val isFiltered by viewModel.isFiltered.collectAsStateSafe()
+    val rangeFilter by viewModel.rangeFilter.collectAsStateSafe()
+    val availableRanges by viewModel.availableRanges.collectAsStateSafe()
+    val hiddenNoDistance by viewModel.hiddenNoDistanceCount.collectAsStateSafe()
 
     val listState = rememberLazyListState()
     val scrollProgress by rememberScrollProgress(listState)
@@ -242,8 +247,23 @@ fun StatusScreen(
                         availableKinds = availableKinds,
                         selectedKind = kindFilter,
                         onKindChange = viewModel::setKindFilter,
-                        counts = riskCounts
+                        counts = riskCounts,
+                        rangeFilter = rangeFilter,
+                        availableRanges = availableRanges,
+                        onRangeChange = { range ->
+                            haptics.select(range.isActive)
+                            viewModel.setRangeFilter(range)
+                        }
                     )
+                }
+
+                if (hiddenNoDistance > 0) {
+                    item(key = "hidden-by-range") {
+                        HiddenByRangeNotice(
+                            count = hiddenNoDistance,
+                            onShowAll = { viewModel.setRangeFilter(RangeFilter.ANY) }
+                        )
+                    }
                 }
             }
 
@@ -286,6 +306,7 @@ fun StatusScreen(
                         DeviceRow(
                             device = device,
                             onClick = { onDeviceClick(device.id) },
+                            onLocate = { haptics.commit(); onLocateDevice(device.id) },
                             showDivider = !isLast,
                             // Only the first screenful staggers. Rows revealed by
                             // scrolling should already be there when they arrive.

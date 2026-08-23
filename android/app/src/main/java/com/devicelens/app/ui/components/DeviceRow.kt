@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Bluetooth
 import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.MyLocation
 import androidx.compose.material.icons.rounded.Wifi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -30,6 +31,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.devicelens.app.data.db.DeviceEntity
+import com.devicelens.app.domain.model.Proximity
 import com.devicelens.app.ui.theme.ExtendedTheme
 import com.devicelens.app.ui.theme.MonoType
 import com.devicelens.app.ui.theme.Motion
@@ -62,6 +64,7 @@ fun DeviceRow(
     device: DeviceEntity,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    onLocate: (() -> Unit)? = null,
     showDivider: Boolean = true
 ) {
     val colors = ExtendedTheme.colors
@@ -72,6 +75,11 @@ fun DeviceRow(
     }
     val isSuspicious = device.riskLevel == "SUSPICIOUS"
     val kind = DeviceKind.resolve(device.deviceType, device.deviceName, device.vendor)
+    val proximity = Proximity.fromRssi(device.rssiLastSeen)
+
+    // Only devices with a signal reading can be walked towards. Offering the
+    // button on a Wi-Fi host would open a meter that can never move.
+    val locatable = onLocate != null && device.rssiLastSeen != null
 
     Column(modifier = modifier.fillMaxWidth()) {
         Row(
@@ -119,16 +127,37 @@ fun DeviceRow(
                     )
                 }
 
-                val address = device.ipAddress?.takeIf { it.isNotBlank() }
-                    ?: device.macAddress?.takeIf { it.isNotBlank() }
-                if (address != null) {
-                    Spacer(Modifier.height(3.dp))
-                    Text(
-                        text = address,
-                        style = MonoType.small,
-                        color = colors.textQuaternary,
-                        maxLines = 1
-                    )
+                Spacer(Modifier.height(3.dp))
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Distance leads, because "is it in this room?" is the
+                    // question — the address matters only once you're chasing it.
+                    if (proximity != null) {
+                        Text(
+                            text = proximity.label,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = proximityTint(proximity, colors)
+                        )
+                        Proximity.formatDistance(device.rssiLastSeen)?.let { distance ->
+                            Spacer(Modifier.width(Space.sm))
+                            Text(
+                                text = distance,
+                                style = MonoType.small,
+                                color = colors.textQuaternary
+                            )
+                        }
+                    } else {
+                        val address = device.ipAddress?.takeIf { it.isNotBlank() }
+                            ?: device.macAddress?.takeIf { it.isNotBlank() }
+                        if (address != null) {
+                            Text(
+                                text = address,
+                                style = MonoType.small,
+                                color = colors.textQuaternary,
+                                maxLines = 1
+                            )
+                        }
+                    }
                 }
             }
 
@@ -142,14 +171,19 @@ fun DeviceRow(
                 }
             }
 
-            Icon(
-                imageVector = Icons.Rounded.ChevronRight,
-                contentDescription = null,
-                tint = colors.textQuaternary,
-                modifier = Modifier
-                    .padding(start = Space.xs)
-                    .size(18.dp)
-            )
+            if (locatable) {
+                Spacer(Modifier.width(Space.sm))
+                LocateAction(accent = riskColor, onClick = onLocate!!)
+            } else {
+                Icon(
+                    imageVector = Icons.Rounded.ChevronRight,
+                    contentDescription = null,
+                    tint = colors.textQuaternary,
+                    modifier = Modifier
+                        .padding(start = Space.xs)
+                        .size(18.dp)
+                )
+            }
         }
 
         if (showDivider) {
@@ -165,6 +199,42 @@ fun DeviceRow(
         }
     }
 }
+
+/**
+ * The one-tap route into Locate Mode.
+ *
+ * Sits on the row itself rather than behind the detail page, because "I can see
+ * there's a camera, now where *is* it" is the next thought, and making someone
+ * open a detail screen to find the button loses them.
+ */
+@Composable
+private fun LocateAction(accent: Color, onClick: () -> Unit) {
+    val colors = ExtendedTheme.colors
+    Box(
+        modifier = Modifier
+            .size(36.dp)
+            .clip(CircleShape)
+            .background(accent.copy(alpha = Tint.subtle))
+            .pressable(onClick = onClick, pressScale = 0.88f),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = Icons.Rounded.MyLocation,
+            contentDescription = "Find where this device is",
+            tint = accent,
+            modifier = Modifier.size(17.dp)
+        )
+    }
+}
+
+/** Distance bands read as a scale: nearest is loudest. */
+private fun proximityTint(proximity: Proximity, colors: com.devicelens.app.ui.theme.ExtendedColors) =
+    when (proximity) {
+        Proximity.IMMEDIATE -> colors.statusRisk
+        Proximity.THIS_ROOM -> colors.statusWarning
+        Proximity.NEXT_ROOM -> colors.textSecondary
+        Proximity.DISTANT -> colors.textQuaternary
+    }
 
 /** The leading risk bar. Present on every row so the list has a readable rhythm. */
 @Composable

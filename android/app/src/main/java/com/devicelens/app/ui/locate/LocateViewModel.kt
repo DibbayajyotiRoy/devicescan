@@ -1,7 +1,6 @@
 package com.devicelens.app.ui.locate
 
 import android.bluetooth.BluetoothAdapter
-import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.devicelens.app.data.db.DeviceEntity
@@ -38,14 +37,22 @@ import kotlin.math.roundToInt
  */
 @HiltViewModel
 class LocateViewModel @Inject constructor(
-    savedStateHandle: SavedStateHandle,
     private val deviceRepository: DeviceRepository,
     private val bleScanner: BleScanner,
     private val bluetoothAdapter: BluetoothAdapter?
 ) : ViewModel() {
 
     private val TAG = "LocateViewModel"
-    private val deviceId: Long = savedStateHandle.get<Long>("deviceId") ?: -1L
+
+    /**
+     * Which device to hunt for.
+     *
+     * Passed in explicitly rather than read from a `SavedStateHandle`. The sheet
+     * is rendered as an overlay above the nav graph, not as a navigation
+     * destination, so there were never any navigation arguments to read — the id
+     * silently resolved to -1 and Locate Mode could never find anything.
+     */
+    private var deviceId: Long = -1L
 
     private val _device = MutableStateFlow<DeviceEntity?>(null)
     val device: StateFlow<DeviceEntity?> = _device
@@ -89,15 +96,34 @@ class LocateViewModel @Inject constructor(
 
     private var lastComparison: Float? = null
 
-    init {
+    /** Begins tracking. Safe to call again with the same id; it will not restart. */
+    fun start(id: Long) {
+        if (deviceId == id && trackingJob?.isActive == true) return
+        stopTracking()
+        deviceId = id
+        resetState()
+
         viewModelScope.launch {
-            val entity = deviceRepository.findById(deviceId)
+            val entity = deviceRepository.findById(id)
             _device.value = entity
-            start(entity)
+            beginTracking(entity)
         }
     }
 
-    private fun start(entity: DeviceEntity?) {
+    private fun resetState() {
+        smoothed = null
+        bestRssi = null
+        worstRssi = null
+        lastComparison = null
+        _rssi.value = null
+        _proximity.value = 0f
+        _trend.value = Trend.SEARCHING
+        _estimatedMetres.value = null
+        _unavailableReason.value = null
+        _feedbackText.value = "Listening for the device…"
+    }
+
+    private fun beginTracking(entity: DeviceEntity?) {
         val address = entity?.macAddress
         when {
             entity == null -> {
@@ -155,13 +181,27 @@ class LocateViewModel @Inject constructor(
         _rssi.value = next.roundToInt()
         _estimatedMetres.value = estimateMetres(next)
 
-        // Proximity is scaled against this session's own range, so the meter
-        // uses its full travel in whatever environment the user is standing in
-        // rather than against an absolute scale that may never be reached.
+        // Proximity blends two scales, because either alone is wrong.
+        //
+        // An absolute scale (dBm mapped onto a fixed range) is correct the
+        // instant the first reading lands — stand next to the device and the
+        // meter is immediately high. But indoors it rarely uses its full travel,
+        // so it feels unresponsive as you move.
+        //
+        // A relative scale (this session's own weakest-to-strongest) always uses
+        // the full dial and rewards movement, but reads 0% on the very first
+        // sample even if the device is in your hand — which is exactly when the
+        // user is deciding whether to trust the feature.
+        //
+        // Weighted towards absolute so the number means something on its own,
+        // with enough relative influence that walking around moves the dial.
         val best = bestRssi ?: next
         val worst = worstRssi ?: next
         val span = (best - worst).coerceAtLeast(MIN_SPAN)
-        _proximity.value = ((next - worst) / span).coerceIn(0f, 1f)
+
+        val absolute = ((next - FLOOR_RSSI) / (CEILING_RSSI - FLOOR_RSSI)).coerceIn(0f, 1f)
+        val relative = ((next - worst) / span).coerceIn(0f, 1f)
+        _proximity.value = (absolute * 0.65f + relative * 0.35f).coerceIn(0f, 1f)
 
         updateTrend(next, best)
     }
@@ -231,6 +271,12 @@ class LocateViewModel @Inject constructor(
         const val TREND_THRESHOLD = 2.5f
         const val VERY_CLOSE_RSSI = -50f
         const val MIN_SPAN = 12f
+
+        /** Bottom of the absolute scale — about as weak as a usable BLE link gets. */
+        const val FLOOR_RSSI = -100f
+
+        /** Top of the absolute scale — roughly touching distance. */
+        const val CEILING_RSSI = -45f
 
         /** Typical BLE RSSI at one metre. */
         const val REFERENCE_RSSI = -59f

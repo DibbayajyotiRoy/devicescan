@@ -23,6 +23,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -40,6 +41,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.devicelens.app.domain.model.OverallStatus
+import com.devicelens.app.domain.model.RangeFilter
 import com.devicelens.app.ui.components.DeviceKind
 import com.devicelens.app.ui.components.animatedCount
 import com.devicelens.app.ui.components.pressable
@@ -323,6 +325,9 @@ fun DeviceFilterBar(
     selectedKind: DeviceKind?,
     onKindChange: (DeviceKind?) -> Unit,
     counts: Map<RiskFilter, Int>,
+    rangeFilter: RangeFilter,
+    availableRanges: List<RangeFilter>,
+    onRangeChange: (RangeFilter) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val colors = ExtendedTheme.colors
@@ -385,6 +390,14 @@ fun DeviceFilterBar(
                 focusedTextColor = colors.textPrimary,
                 unfocusedTextColor = colors.textPrimary
             )
+        )
+
+        Spacer(Modifier.height(Space.md))
+
+        RangeSelector(
+            selected = rangeFilter,
+            available = availableRanges,
+            onSelect = onRangeChange
         )
 
         Spacer(Modifier.height(Space.md))
@@ -547,5 +560,142 @@ fun SectionLabel(
                 color = colors.textQuaternary
             )
         }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Range
+// ─────────────────────────────────────────────────────────────────────
+
+/**
+ * "How far out should I look?"
+ *
+ * A segmented control rather than another row of chips, because distance is a
+ * single ordered scale with one answer, not a set of independent tags. The
+ * shape says so: one track, one selection, ordered from everything down to
+ * arm's reach.
+ */
+@Composable
+fun RangeSelector(
+    selected: RangeFilter,
+    available: List<RangeFilter>,
+    onSelect: (RangeFilter) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colors = ExtendedTheme.colors
+    val options = RangeFilter.entries.filter { it in available }
+    if (options.size < 2) return
+
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(Radius.full)
+                .background(colors.surfaceGlass)
+                .border(1.dp, colors.hairlineBorder, Radius.full)
+                .padding(3.dp),
+            horizontalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            options.forEach { option ->
+                val isSelected = option == selected
+
+                val selection by animateFloatAsState(
+                    targetValue = if (isSelected) 1f else 0f,
+                    animationSpec = Motion.standard(),
+                    label = "rangeSelection"
+                )
+
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(Radius.full)
+                        .background(
+                            androidx.compose.ui.graphics.lerp(
+                                Color.Transparent,
+                                colors.securityTeal.copy(alpha = Tint.medium),
+                                selection
+                            )
+                        )
+                        .pressable(onClick = { onSelect(option) }, pressScale = 0.96f)
+                        .padding(vertical = Space.sm),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = option.shortLabel,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = androidx.compose.ui.graphics.lerp(
+                            colors.textTertiary, colors.securityTeal, selection
+                        ),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
+
+        // The caption carries the caveat. Distance from radio signal is an
+        // estimate that walls, bodies and metal casings all distort, and a
+        // filter that quietly hid a real camera would be worse than no filter.
+        AnimatedVisibility(
+            visible = selected.isActive,
+            enter = fadeIn(Motion.fade()) + expandVertically(),
+            exit = fadeOut(Motion.fade()) + shrinkVertically()
+        ) {
+            Text(
+                text = "Showing ${selected.label.lowercase()} · estimated from signal strength, " +
+                    "so walls and metal cases can shift it",
+                style = MaterialTheme.typography.labelSmall,
+                color = colors.textQuaternary,
+                modifier = Modifier.padding(top = Space.sm, start = Space.sm)
+            )
+        }
+    }
+}
+
+/**
+ * Tells the user what a distance filter is hiding.
+ *
+ * Wi-Fi discovery reaches a device over the network, which says nothing about
+ * where it physically is. Those devices cannot honour a distance filter, so
+ * they are excluded — but silently excluding a possible camera is exactly the
+ * failure this app exists to prevent, so the count is stated with a way back.
+ */
+@Composable
+fun HiddenByRangeNotice(
+    count: Int,
+    onShowAll: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colors = ExtendedTheme.colors
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(Radius.sm)
+            .background(colors.surfaceGlass)
+            .pressable(onClick = onShowAll, pressScale = 0.99f)
+            .padding(Space.md),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = Icons.Rounded.Info,
+            contentDescription = null,
+            tint = colors.textQuaternary,
+            modifier = Modifier.size(16.dp)
+        )
+        Spacer(Modifier.width(Space.sm))
+        Text(
+            text = "$count Wi-Fi ${if (count == 1) "device is" else "devices are"} hidden — " +
+                "Wi-Fi doesn't report distance",
+            style = MaterialTheme.typography.bodySmall,
+            color = colors.textTertiary,
+            modifier = Modifier.weight(1f)
+        )
+        Spacer(Modifier.width(Space.sm))
+        Text(
+            text = "Show",
+            style = MaterialTheme.typography.labelMedium,
+            color = colors.securityTeal
+        )
     }
 }

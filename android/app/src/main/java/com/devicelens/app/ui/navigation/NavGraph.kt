@@ -49,8 +49,9 @@ fun DeviceLensNavHost(
     }
 
     // Locate mode sheet
-    locateDeviceId?.let {
+    locateDeviceId?.let { deviceId ->
         LocateModeSheet(
+            deviceId = deviceId,
             onDismiss = { locateDeviceId = null }
         )
     }
@@ -78,6 +79,10 @@ fun DeviceLensNavHost(
                 onDeviceClick = { deviceId ->
                     navController.navigate(Screen.DeviceDetails.createRoute(deviceId))
                 },
+                // Straight from the list into Locate Mode. Finding where a
+                // flagged camera physically is should not require opening its
+                // detail page first — that is the whole point of the feature.
+                onLocateDevice = { deviceId -> locateDeviceId = deviceId },
                 onNavigateToSetup = {
                     navController.navigate(Screen.Setup.route)
                 },

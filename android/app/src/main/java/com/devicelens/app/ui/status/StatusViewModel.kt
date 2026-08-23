@@ -23,6 +23,8 @@ import com.devicelens.app.domain.analysis.NetworkThreatAnalyzer
 import com.devicelens.app.domain.analysis.TrackerDetector
 import com.devicelens.app.domain.model.NetworkSummary
 import com.devicelens.app.domain.model.OverallStatus
+import com.devicelens.app.domain.model.Proximity
+import com.devicelens.app.domain.model.RangeFilter
 import com.devicelens.app.domain.model.ScanProgress
 import com.devicelens.app.domain.orchestration.ScanOrchestrator
 import com.devicelens.app.helpers.DebugLog
@@ -105,6 +107,46 @@ class StatusViewModel @Inject constructor(
     private val _kindFilter = MutableStateFlow<DeviceKind?>(null)
     val kindFilter: StateFlow<DeviceKind?> = _kindFilter
 
+    /**
+     * How far out to look.
+     *
+     * The complaint this answers: a scan in a block of flats returns the
+     * neighbours' televisions, and a list of forty devices five rooms away
+     * buries the one that is in the room with you. Narrowing by distance is the
+     * single most useful cut available, because "is it in here?" is the question
+     * being asked.
+     */
+    private val _rangeFilter = MutableStateFlow(RangeFilter.ANY)
+    val rangeFilter: StateFlow<RangeFilter> = _rangeFilter
+
+    /**
+     * Wi-Fi hosts hidden by an active range filter.
+     *
+     * Wi-Fi discovery finds a device by talking to it over the network, which
+     * reveals nothing about how far away it is — the phone only knows its own
+     * distance from the router. Rather than silently dropping those devices when
+     * a distance filter is on, or pretending to know a distance we cannot
+     * measure, the count is surfaced so the user knows what is not on screen.
+     */
+    val hiddenNoDistanceCount: StateFlow<Int> =
+        combine(devices, _rangeFilter, _riskFilter, _kindFilter) { list, range, risk, kind ->
+            if (!range.isActive) 0
+            else list.count { device ->
+                device.rssiLastSeen == null &&
+                    risk.matches(device.riskLevel) &&
+                    (kind == null || DeviceKind.resolve(device.deviceType, device.deviceName, device.vendor) == kind)
+            }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
+    /** Range bands that actually contain something, so no filter leads to a dead end. */
+    val availableRanges: StateFlow<List<RangeFilter>> = devices
+        .map { list ->
+            RangeFilter.entries.filter { range ->
+                range == RangeFilter.ANY || list.any { range.matches(it.rssiLastSeen) }
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), listOf(RangeFilter.ANY))
+
     /** Device kinds actually present, so the UI only offers filters that match something. */
     val availableKinds: StateFlow<List<DeviceKind>> = devices
         .map { list ->
@@ -115,11 +157,14 @@ class StatusViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val filteredDevices: StateFlow<List<DeviceEntity>> =
-        combine(devices, _searchQuery, _riskFilter, _kindFilter) { list, query, risk, kind ->
+        combine(
+            devices, _searchQuery, _riskFilter, _kindFilter, _rangeFilter
+        ) { list, query, risk, kind, range ->
             val trimmed = query.trim()
             list.asSequence()
                 .filter { risk.matches(it.riskLevel) }
                 .filter { kind == null || DeviceKind.resolve(it.deviceType, it.deviceName, it.vendor) == kind }
+                .filter { range.matches(it.rssiLastSeen) }
                 .filter { device ->
                     if (trimmed.isEmpty()) return@filter true
                     // Searching an address or a MAC is how someone chases down a
@@ -133,21 +178,29 @@ class StatusViewModel @Inject constructor(
                     ).any { it.contains(trimmed, ignoreCase = true) }
                 }
                 .toList()
+                // Within a distance filter, nearest first: the user is hunting
+                // for the closest thing, so that is what belongs at the top.
+                .let { filtered ->
+                    if (range.isActive) filtered.sortedByDescending { it.rssiLastSeen ?: Int.MIN_VALUE }
+                    else filtered
+                }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val isFiltered: StateFlow<Boolean> =
-        combine(_searchQuery, _riskFilter, _kindFilter) { query, risk, kind ->
-            query.isNotBlank() || risk != RiskFilter.ALL || kind != null
+        combine(_searchQuery, _riskFilter, _kindFilter, _rangeFilter) { query, risk, kind, range ->
+            query.isNotBlank() || risk != RiskFilter.ALL || kind != null || range.isActive
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     fun setSearchQuery(query: String) { _searchQuery.value = query }
     fun setRiskFilter(filter: RiskFilter) { _riskFilter.value = filter }
     fun setKindFilter(kind: DeviceKind?) { _kindFilter.value = if (_kindFilter.value == kind) null else kind }
+    fun setRangeFilter(range: RangeFilter) { _rangeFilter.value = range }
 
     fun clearFilters() {
         _searchQuery.value = ""
         _riskFilter.value = RiskFilter.ALL
         _kindFilter.value = null
+        _rangeFilter.value = RangeFilter.ANY
     }
 
     val safeCount: StateFlow<Int> = devices

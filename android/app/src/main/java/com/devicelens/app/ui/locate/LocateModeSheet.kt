@@ -79,9 +79,14 @@ import kotlin.math.roundToInt
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LocateModeSheet(
+    deviceId: Long,
     onDismiss: () -> Unit,
     viewModel: LocateViewModel = hiltViewModel()
 ) {
+    // The id arrives as a parameter because this sheet is an overlay, not a
+    // navigation destination — there is no argument bundle to read it from.
+    LaunchedEffect(deviceId) { viewModel.start(deviceId) }
+
     val colors = ExtendedTheme.colors
     val haptics = rememberHaptics()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
