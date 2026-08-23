@@ -1,309 +1,283 @@
 package com.devicelens.app.ui.components
 
-import androidx.compose.animation.*
-import androidx.compose.animation.core.*
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.*
-import androidx.compose.material.icons.outlined.ChevronRight
-import androidx.compose.material.icons.outlined.Wifi
-import androidx.compose.material.icons.outlined.Bluetooth
-import androidx.compose.material3.*
+import androidx.compose.material.icons.rounded.Bluetooth
+import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.Wifi
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.devicelens.app.data.db.DeviceEntity
 import com.devicelens.app.ui.theme.ExtendedTheme
-import com.devicelens.app.ui.theme.JetBrainsMonoFamily
-import com.devicelens.app.ui.theme.ShapeMedium
+import com.devicelens.app.ui.theme.MonoType
+import com.devicelens.app.ui.theme.Motion
+import com.devicelens.app.ui.theme.Radius
+import com.devicelens.app.ui.theme.Space
+import com.devicelens.app.ui.theme.Tint
 
-// ═════════════════════════════════════════════════════════════════════════════
-// DEVICE ROW — DOUBLE-BEZEL NESTED ARCHITECTURE
-// Glass-morphic cards with haptic press feedback and risk indicators
-// ═════════════════════════════════════════════════════════════════════════════
-
+/**
+ * One device in the list.
+ *
+ * Designed as a row inside a grouped container rather than a floating card. A
+ * screen of individually-shadowed cards reads as a pile of unrelated objects;
+ * rows sharing one surface with hairline separators read as a single list, and
+ * they fit far more devices on screen — which matters when a network has two
+ * hundred of them.
+ *
+ * The information hierarchy is fixed and deliberate:
+ *
+ *  1. **Name** — the only line most people read.
+ *  2. **What it is, and who made it** — the answer to "should this be here?".
+ *  3. **Address** — set in monospace, because it is a machine fact, and dimmed,
+ *     because it only matters once you are investigating.
+ *
+ * Risk is carried by a single 3 dp bar on the leading edge, not by tinting the
+ * whole row. A list where every row is a coloured panel has no hierarchy left
+ * to spend on the one row that is genuinely alarming.
+ */
 @Composable
 fun DeviceRow(
     device: DeviceEntity,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    showDivider: Boolean = true
 ) {
-    // Theme-aware status colors
+    val colors = ExtendedTheme.colors
     val riskColor = when (device.riskLevel) {
-        "SAFE" -> ExtendedTheme.colors.statusSafe
-        "SUSPICIOUS" -> ExtendedTheme.colors.statusRisk
-        else -> ExtendedTheme.colors.statusWarning
+        "SAFE" -> colors.statusSafe
+        "SUSPICIOUS" -> colors.statusRisk
+        else -> colors.statusWarning
     }
-
-    val riskGlowColor = when (device.riskLevel) {
-        "SAFE" -> ExtendedTheme.colors.statusSafeGlow
-        "SUSPICIOUS" -> ExtendedTheme.colors.statusRiskGlow
-        else -> ExtendedTheme.colors.statusWarningGlow
-    }
-
     val isSuspicious = device.riskLevel == "SUSPICIOUS"
+    val kind = DeviceKind.resolve(device.deviceType, device.deviceName, device.vendor)
 
-    val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
-    val haptics = LocalHapticFeedback.current
-
-    val pressScale by animateFloatAsState(
-        targetValue = if (isPressed) 0.98f else 1f,
-        animationSpec = tween(100),
-        label = "pressScale"
-    )
-
-    // Outer shell — Double-bezel glass container with theme-aware accent
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .scale(pressScale)
-            .clip(ShapeMedium)
-            .background(
-                if (isSuspicious) {
-                    riskColor.copy(alpha = 0.2f)
-                } else {
-                    ExtendedTheme.colors.hairlineBorder
-                }
-            )
-            .padding(1.dp)
-            .clickable(
-                interactionSource = interactionSource,
-                indication = null,
-                onClick = {
-                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    onClick()
-                }
-            )
-    ) {
-        // Inner core — glass-morphic content container
-        Box(
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(19.dp))
-                .background(
-                    brush = Brush.linearGradient(
-                        colors = listOf(
-                            if (isSuspicious) riskGlowColor.copy(alpha = 0.3f)
-                            else ExtendedTheme.colors.surfaceGlass,
-                            if (isSuspicious) riskGlowColor.copy(alpha = 0.1f)
-                            else ExtendedTheme.colors.surfaceGlassHighlight.copy(alpha = 0.5f)
-                        )
-                    )
-                )
-                .padding(16.dp)
+                // No haptic here: in a scrolling list every touch-to-scroll would
+                // fire one, and constant buzzing while scrolling is worse than none.
+                .pressable(onClick = onClick, pressScale = 0.985f, hapticOnPress = false)
+                .padding(horizontal = Space.lg, vertical = Space.md),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                // Device icon
-                DeviceTypeIcon(
-                    deviceName = device.deviceName,
-                    vendor = device.vendor,
-                    deviceType = device.deviceType,
-                    modifier = Modifier.size(48.dp),
-                    isSuspicious = isSuspicious
+            RiskEdge(color = riskColor, emphasised = isSuspicious)
+
+            Spacer(Modifier.width(Space.md))
+
+            DeviceGlyph(kind = kind, riskColor = riskColor, emphasised = isSuspicious)
+
+            Spacer(Modifier.width(Space.md))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = device.deviceName,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = colors.textPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
 
-                // Content column
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    // Row 1: Device name + risk badge if suspicious
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
-                            text = device.deviceName,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            color = if (isSuspicious) ExtendedTheme.colors.statusRisk
-                            else MaterialTheme.colorScheme.onSurface
-                        )
+                Spacer(Modifier.height(2.dp))
 
-                        // Risk badge for suspicious devices
-                        if (isSuspicious) {
-                            RiskBadge()
-                        }
-                    }
+                // Kind and vendor, joined only when both say something. A row
+                // reading "Unidentified device · Unknown" is worse than silence.
+                val descriptor = listOfNotNull(
+                    kind.takeIf { it != DeviceKind.UNKNOWN }?.label,
+                    device.vendor.takeIf { it.isNotBlank() && it != "Unknown" }
+                ).distinct().joinToString(" · ")
 
-                    // Row 2: Detection method + vendor
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        // Detection method pill
-                        DetectionPill(
-                            method = device.detectionMethod,
-                            isSuspicious = isSuspicious
-                        )
-
-                        // Vendor chip
-                        if (device.vendor != "Unknown") {
-                            Text(
-                                text = device.vendor,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = ExtendedTheme.colors.textTertiary,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
-
-                    // Row 3: Technical details (IP, MAC)
-                    val subInfo = buildString {
-                        device.ipAddress?.let { append(it) }
-                        device.macAddress?.let {
-                            if (isNotEmpty()) append(" · ")
-                            append(it.uppercase())
-                        }
-                    }
-                    if (subInfo.isNotEmpty()) {
-                        Text(
-                            text = subInfo,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontFamily = JetBrainsMonoFamily,
-                            color = ExtendedTheme.colors.textQuaternary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-
-                    // Row 4: Open ports (if any)
-                    if (device.openPorts.isNotBlank()) {
-                        Text(
-                            text = "Ports: ${device.openPorts}",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontFamily = JetBrainsMonoFamily,
-                            color = ExtendedTheme.colors.textQuaternary.copy(alpha = 0.7f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
+                if (descriptor.isNotBlank()) {
+                    Text(
+                        text = descriptor,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.textTertiary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
 
-                // Trailing chevron
-                Icon(
-                    imageVector = Icons.Outlined.ChevronRight,
-                    contentDescription = null,
-                    tint = ExtendedTheme.colors.textQuaternary,
-                    modifier = Modifier.size(20.dp)
-                )
+                val address = device.ipAddress?.takeIf { it.isNotBlank() }
+                    ?: device.macAddress?.takeIf { it.isNotBlank() }
+                if (address != null) {
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        text = address,
+                        style = MonoType.small,
+                        color = colors.textQuaternary,
+                        maxLines = 1
+                    )
+                }
             }
+
+            Spacer(Modifier.width(Space.sm))
+
+            Column(horizontalAlignment = Alignment.End) {
+                DetectionBadge(method = device.detectionMethod)
+                device.rssiLastSeen?.let { rssi ->
+                    Spacer(Modifier.height(Space.sm))
+                    SignalBars(rssi = rssi, tint = riskColor)
+                }
+            }
+
+            Icon(
+                imageVector = Icons.Rounded.ChevronRight,
+                contentDescription = null,
+                tint = colors.textQuaternary,
+                modifier = Modifier
+                    .padding(start = Space.xs)
+                    .size(18.dp)
+            )
+        }
+
+        if (showDivider) {
+            // Inset to align with the text, not the container edge — the divider
+            // separates rows, so it should start where the content does.
+            Box(
+                modifier = Modifier
+                    .padding(start = 64.dp)
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(colors.hairlineBorder)
+            )
         }
     }
 }
 
+/** The leading risk bar. Present on every row so the list has a readable rhythm. */
 @Composable
-private fun DetectionPill(
-    method: String,
-    isSuspicious: Boolean
-) {
-    val (icon, label) = when (method) {
-        "WIFI" -> Icons.Outlined.Wifi to "Wi-Fi"
-        "BLE" -> Icons.Outlined.Bluetooth to "Bluetooth"
-        "BOTH" -> Icons.Outlined.Wifi to "Dual"
-        else -> Icons.Outlined.Wifi to method
-    }
-
-    val riskColor = if (isSuspicious) ExtendedTheme.colors.statusRisk else ExtendedTheme.colors.textTertiary
-
-    val backgroundColor = if (isSuspicious) {
-        ExtendedTheme.colors.statusRiskGlow.copy(alpha = 0.4f)
-    } else {
-        ExtendedTheme.colors.surfaceGlassBorder.copy(alpha = 0.3f)
-    }
-
-    val contentColor = riskColor
-
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-        modifier = Modifier
-            .clip(RoundedCornerShape(6.dp))
-            .background(backgroundColor)
-            .padding(horizontal = 8.dp, vertical = 4.dp)
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = contentColor,
-            modifier = Modifier.size(12.dp)
-        )
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = contentColor
-        )
-    }
-}
-
-@Composable
-private fun RiskBadge() {
+private fun RiskEdge(color: Color, emphasised: Boolean) {
+    val alpha by animateFloatAsState(
+        targetValue = if (emphasised) 1f else 0.55f,
+        animationSpec = Motion.standard(),
+        label = "riskEdge"
+    )
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(6.dp))
-            .background(ExtendedTheme.colors.statusRiskGlow.copy(alpha = 0.5f))
-            .padding(horizontal = 8.dp, vertical = 3.dp)
+            .width(3.dp)
+            .height(if (emphasised) 34.dp else 26.dp)
+            .clip(Radius.full)
+            .background(color.copy(alpha = alpha))
+    )
+}
+
+/**
+ * The device icon in a tinted tile.
+ *
+ * Neutral for everything except a genuine concern, which is the only case where
+ * colour has something to say.
+ */
+@Composable
+private fun DeviceGlyph(
+    kind: DeviceKind,
+    riskColor: Color,
+    emphasised: Boolean
+) {
+    val colors = ExtendedTheme.colors
+    val background = if (emphasised) riskColor.copy(alpha = Tint.subtle) else colors.surfaceGlassHighlight
+    val tint = if (emphasised) riskColor else colors.textSecondary
+
+    Box(
+        modifier = Modifier
+            .size(38.dp)
+            .clip(RoundedCornerShape(11.dp))
+            .background(background),
+        contentAlignment = Alignment.Center
     ) {
-        Text(
-            text = "SUSPICIOUS",
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.SemiBold,
-            color = ExtendedTheme.colors.statusRisk
+        Icon(
+            imageVector = kind.icon,
+            contentDescription = kind.label,
+            tint = tint,
+            modifier = Modifier.size(19.dp)
         )
     }
 }
 
-// Keep reference to detectDeviceIcon for legacy compatibility
-@Deprecated("Use detectDeviceIcon from DeviceTypeIcon.kt instead")
-private fun getDeviceTypeIcon(deviceType: String?): ImageVector? {
-    if (deviceType.isNullOrBlank() || deviceType == "Unknown") return null
+/** Which radio found this device. */
+@Composable
+private fun DetectionBadge(method: String) {
+    val colors = ExtendedTheme.colors
+    val icon = when (method) {
+        "WIFI" -> Icons.Rounded.Wifi
+        else -> Icons.Rounded.Bluetooth
+    }
+    Icon(
+        imageVector = icon,
+        contentDescription = when (method) {
+            "WIFI" -> "Found on Wi-Fi"
+            "BT_CLASSIC" -> "Found over Bluetooth"
+            else -> "Found over Bluetooth LE"
+        },
+        tint = colors.textQuaternary,
+        modifier = Modifier.size(14.dp)
+    )
+}
 
-    val type = deviceType.lowercase()
-    return when {
-        type.contains("camera") || type.contains("dvr") || type.contains("nvr") ->
-            Icons.Outlined.Videocam
-        type.contains("router") || type.contains("gateway") || type.contains("modem") ->
-            Icons.Outlined.Router
-        type.contains("tv") || type.contains("media") || type.contains("chromecast") ->
-            Icons.Outlined.Tv
-        type.contains("speaker") || type.contains("audio") ->
-            Icons.Outlined.Speaker
-        type.contains("computer") || type.contains("laptop") || type.contains("desktop") ->
-            Icons.Outlined.Computer
-        type.contains("phone") || type.contains("mobile") ->
-            Icons.Outlined.Smartphone
-        type.contains("watch") || type.contains("wearable") ->
-            Icons.Outlined.Watch
-        type.contains("printer") ->
-            Icons.Outlined.Print
-        type.contains("nas") || type.contains("storage") ->
-            Icons.Outlined.Storage
-        else -> null
+/**
+ * Four bars for signal strength.
+ *
+ * RSSI is in dBm and negative — closer to zero is stronger. The thresholds
+ * below are the usual practical ones: better than −55 is in the room with you,
+ * worse than −85 is through a wall or two.
+ */
+@Composable
+fun SignalBars(
+    rssi: Int,
+    tint: Color,
+    modifier: Modifier = Modifier
+) {
+    val colors = ExtendedTheme.colors
+    val filled = when {
+        rssi >= -55 -> 4
+        rssi >= -68 -> 3
+        rssi >= -80 -> 2
+        rssi >= -92 -> 1
+        else -> 0
+    }
+
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.Bottom,
+        horizontalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        repeat(4) { index ->
+            val isOn = index < filled
+            // Each bar eases independently, so a device getting closer animates
+            // up the scale instead of snapping between states.
+            val alpha by animateFloatAsState(
+                targetValue = if (isOn) 1f else 0.22f,
+                animationSpec = Motion.standard(),
+                label = "bar$index"
+            )
+            Box(
+                modifier = Modifier
+                    .width(2.5.dp)
+                    .height((5 + index * 3).dp)
+                    .clip(Radius.full)
+                    .background((if (isOn) tint else colors.textQuaternary).copy(alpha = alpha))
+            )
+        }
     }
 }

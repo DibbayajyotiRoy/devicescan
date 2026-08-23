@@ -2,25 +2,32 @@ package com.devicelens.app.ui.theme
 
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.material3.*
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Typography
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.PlatformTextStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.devicelens.app.R
 
-// ═════════════════════════════════════════════════════════════════════════════
-// PREMIUM UI/UX TRANSFORMATION — ETHREAL GLASS ARCHITECTURE
-// Agency-grade design system for DeviceLens Security App
-// ═════════════════════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════════════
+// The theme. See DesignTokens.kt for the reasoning behind the values.
+// ═════════════════════════════════════════════════════════════════════
 
-// ── Typography ───────────────────────────────────────────────────────────────
-// Premium geometric sans-serif with superior legibility
+// ── Type families ────────────────────────────────────────────────────
+
+/** Outfit: a geometric sans with a tall x-height, legible at small sizes. */
 val PlusJakartaFamily = FontFamily(
     Font(R.font.outfit_regular, FontWeight.Light),
     Font(R.font.outfit_regular, FontWeight.Normal),
@@ -30,99 +37,38 @@ val PlusJakartaFamily = FontFamily(
     Font(R.font.outfit_extrabold, FontWeight.ExtraBold),
 )
 
-// Monospace for technical data (MAC, IP addresses)
+/**
+ * JetBrains Mono, used for every value the *machine* produced — MAC addresses,
+ * IPs, ports, subnets, signal strengths. Monospace does two jobs here: hex
+ * columns line up, and the reader can tell measured fact from our prose without
+ * reading a word.
+ */
 val JetBrainsMonoFamily = FontFamily(
     Font(R.font.jetbrains_mono_regular, FontWeight.Normal),
     Font(R.font.jetbrains_mono_regular, FontWeight.Medium),
 )
 
-// ── Animation Easing Curves ───────────────────────────────────────────────────
-// Premium cubic-bezier curves — NEVER use linear or ease-in-out
+// ── Easing ───────────────────────────────────────────────────────────
+// Decelerating curves only. Motion should arrive gently and leave decisively;
+// nothing in a real interface accelerates into its resting position.
 val EaseOutExpo = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)
 val EaseOutQuart = CubicBezierEasing(0.25f, 1.0f, 0.5f, 1.0f)
 val EaseOutCubic = CubicBezierEasing(0.33f, 1.0f, 0.68f, 1.0f)
 val EaseSpring = CubicBezierEasing(0.32f, 0.72f, 0.0f, 1.0f)
 val EaseInOutQuint = CubicBezierEasing(0.83f, 0.0f, 0.17f, 1.0f)
 
-// ── Ultra-Premium Color System ───────────────────────────────────────────────
-// Vibe Archetype: ETHREAL GLASS — Deep OLED, radial mesh gradients
+// ── Semantic colours ─────────────────────────────────────────────────
 
-// Absolute blacks for OLED optimization
-val AbsoluteBlack = Color(0xFF000000)
-val OLEDBlack = Color(0xFF050505)
-val VantaBlack = Color(0xFF0A0A0B)
-val DeepVoid = Color(0xFF0D0D0F)
-
-// Elevated surfaces with glass morphism
-val SurfaceElevated = Color(0xFF111113)
-val SurfaceGlass = Color(0xFF161618)
-val SurfaceGlassHighlight = Color(0xFF1C1C1F)
-val SurfaceGlassBorder = Color(0xFF2A2A2E)
-
-// Hairline borders for glass containers
-val HairlineBorder = Color(0xFFFFFFFF).copy(alpha = 0.08f)
-val HairlineBorderStrong = Color(0xFFFFFFFF).copy(alpha = 0.12f)
-val InnerHighlight = Color(0xFFFFFFFF).copy(alpha = 0.05f)
-
-// Primary accent — Security Teal with depth
-val SecurityTeal = Color(0xFF00D4AA)
-val SecurityTealDim = Color(0xFF00A885)
-val SecurityTealGlow = Color(0xFF00D4AA).copy(alpha = 0.4f)
-
-// Status colors — refined saturations
-val StatusSafe = Color(0xFF34D399)
-val StatusSafeGlow = Color(0xFF34D399).copy(alpha = 0.3f)
-val StatusWarning = Color(0xFFFBBF24)
-val StatusWarningGlow = Color(0xFFFBBF24).copy(alpha = 0.3f)
-val StatusRisk = Color(0xFFEF4444)
-val StatusRiskGlow = Color(0xFFEF4444).copy(alpha = 0.3f)
-
-// Mesh gradient colors — subtle radial orbs
-val MeshPurple = Color(0xFF7C3AED).copy(alpha = 0.15f)
-val MeshTeal = Color(0xFF14B8A6).copy(alpha = 0.12f)
-val MeshAmber = Color(0xFFF59E0B).copy(alpha = 0.08f)
-
-// Text colors with perfect contrast hierarchy
-val TextPrimary = Color(0xFFFFFFFF)
-val TextSecondary = Color(0xFFEBEBF5).copy(alpha = 0.87f)
-val TextTertiary = Color(0xFFEBEBF5).copy(alpha = 0.6f)
-val TextQuaternary = Color(0xFFEBEBF5).copy(alpha = 0.38f)
-
-// Light mode surfaces — Ethereal Glass for Light
-val LightSurface = Color(0xFFF8F8FA)
-val LightSurfaceElevated = Color(0xFFFFFFFF)
-val LightSurfaceGlass = Color(0xFFF4F4F6)
-val LightSurfaceGlassHighlight = Color(0xFFFAFAFC)
-val LightSurfaceGlassBorder = Color(0xFFE5E5EA)
-
-// Light mode accents — softer but still vibrant
-val LightSecurityTeal = Color(0xFF0D9488)
-val LightSecurityTealDim = Color(0xFF0F766E)
-val LightSecurityTealGlow = Color(0xFF14B8A6).copy(alpha = 0.25f)
-
-// Light mode status colors
-val LightStatusSafe = Color(0xFF059669)
-val LightStatusSafeGlow = Color(0xFF10B981).copy(alpha = 0.2f)
-val LightStatusWarning = Color(0xFFB45309)
-val LightStatusWarningGlow = Color(0xFFF59E0B).copy(alpha = 0.2f)
-val LightStatusRisk = Color(0xFFDC2626)
-val LightStatusRiskGlow = Color(0xFFEF4444).copy(alpha = 0.2f)
-
-// Light mode mesh gradients
-val LightMeshPurple = Color(0xFF8B5CF6).copy(alpha = 0.08f)
-val LightMeshTeal = Color(0xFF14B8A6).copy(alpha = 0.06f)
-val LightMeshAmber = Color(0xFFF59E0B).copy(alpha = 0.04f)
-
-// Light mode text
-val LightTextPrimary = Color(0xFF1C1C1E)
-val LightTextSecondary = Color(0xFF3A3A3C)
-val LightTextTertiary = Color(0xFF636366)
-val LightTextQuaternary = Color(0xFF8E8E93)
-
-// ── Extended Color Scheme ───────────────────────────────────────────────────
-// Custom colors beyond Material 3 for premium glass-morphism effects
+/**
+ * Colours Material 3 has no slot for.
+ *
+ * The property names are deliberately about *meaning* — `statusRisk`, not
+ * `red`; `surfaceGlass`, not `grey900`. A name that describes appearance goes
+ * stale the moment the palette changes; a name that describes intent does not.
+ */
+@Immutable
 class ExtendedColors(
-    // Surfaces
+    // Surface ramp
     val surfaceGlass: Color = Color.Unspecified,
     val surfaceGlassHighlight: Color = Color.Unspecified,
     val surfaceGlassBorder: Color = Color.Unspecified,
@@ -130,311 +76,303 @@ class ExtendedColors(
     val hairlineBorderStrong: Color = Color.Unspecified,
     val innerHighlight: Color = Color.Unspecified,
 
-    // Mesh gradients
+    // Retained so existing call sites keep compiling. These are now near-neutral
+    // by design: the old decorative purple/amber orbs competed with the status
+    // colours, which are the only thing on screen the user actually needs to read.
     val meshPurple: Color = Color.Unspecified,
     val meshTeal: Color = Color.Unspecified,
     val meshAmber: Color = Color.Unspecified,
 
-    // Status glows
+    // Status glows, used for focus rings and halos — never as fills.
     val statusSafeGlow: Color = Color.Unspecified,
     val statusWarningGlow: Color = Color.Unspecified,
     val statusRiskGlow: Color = Color.Unspecified,
     val securityTealGlow: Color = Color.Unspecified,
 
-    // Text hierarchy
+    // Text ramp
+    val textPrimary: Color = Color.Unspecified,
+    val textSecondary: Color = Color.Unspecified,
     val textTertiary: Color = Color.Unspecified,
     val textQuaternary: Color = Color.Unspecified,
 
-    // Semantic status colors (theme-aware)
+    // The four meaningful hues
     val statusSafe: Color = Color.Unspecified,
     val statusWarning: Color = Color.Unspecified,
     val statusRisk: Color = Color.Unspecified,
+    /** The interactive accent. Named for history; it is the accent, not a brand teal. */
     val securityTeal: Color = Color.Unspecified,
+
+    val canvas: Color = Color.Unspecified,
 )
 
-// Composition local for extended colors
 val LocalExtendedColors = staticCompositionLocalOf { ExtendedColors() }
 
-// ── Material 3 Color Schemes ─────────────────────────────────────────────────
+private val DarkExtended = ExtendedColors(
+    surfaceGlass = Ink.surface,
+    surfaceGlassHighlight = Ink.surfaceHigh,
+    surfaceGlassBorder = Ink.surfaceMax,
+    hairlineBorder = Ink.hairline,
+    hairlineBorderStrong = Ink.hairlineStrong,
+    innerHighlight = Color.White.copy(alpha = 0.04f),
+
+    meshPurple = Color.White.copy(alpha = 0.02f),
+    meshTeal = Signal.accentDark.copy(alpha = 0.05f),
+    meshAmber = Color.White.copy(alpha = 0.015f),
+
+    statusSafeGlow = Signal.clearDark.copy(alpha = 0.22f),
+    statusWarningGlow = Signal.cautionDark.copy(alpha = 0.22f),
+    statusRiskGlow = Signal.threatDark.copy(alpha = 0.22f),
+    securityTealGlow = Signal.accentDark.copy(alpha = 0.22f),
+
+    textPrimary = Ink.textPrimary,
+    textSecondary = Ink.textSecondary,
+    textTertiary = Ink.textTertiary,
+    textQuaternary = Ink.textQuaternary,
+
+    statusSafe = Signal.clearDark,
+    statusWarning = Signal.cautionDark,
+    statusRisk = Signal.threatDark,
+    securityTeal = Signal.accentDark,
+
+    canvas = Ink.canvas,
+)
+
+private val LightExtended = ExtendedColors(
+    surfaceGlass = Paper.surface,
+    surfaceGlassHighlight = Paper.surfaceHigh,
+    surfaceGlassBorder = Paper.surfaceMax,
+    hairlineBorder = Paper.hairline,
+    hairlineBorderStrong = Paper.hairlineStrong,
+    innerHighlight = Color.White.copy(alpha = 0.9f),
+
+    meshPurple = Color.Black.copy(alpha = 0.015f),
+    meshTeal = Signal.accentLight.copy(alpha = 0.04f),
+    meshAmber = Color.Black.copy(alpha = 0.01f),
+
+    statusSafeGlow = Signal.clearLight.copy(alpha = 0.16f),
+    statusWarningGlow = Signal.cautionLight.copy(alpha = 0.16f),
+    statusRiskGlow = Signal.threatLight.copy(alpha = 0.16f),
+    securityTealGlow = Signal.accentLight.copy(alpha = 0.16f),
+
+    textPrimary = Paper.textPrimary,
+    textSecondary = Paper.textSecondary,
+    textTertiary = Paper.textTertiary,
+    textQuaternary = Paper.textQuaternary,
+
+    statusSafe = Signal.clearLight,
+    statusWarning = Signal.cautionLight,
+    statusRisk = Signal.threatLight,
+    securityTeal = Signal.accentLight,
+
+    canvas = Paper.canvas,
+)
+
+// ── Material 3 schemes ───────────────────────────────────────────────
+
 private val DarkColorScheme = darkColorScheme(
-    primary = SecurityTeal,
-    onPrimary = AbsoluteBlack,
-    primaryContainer = SecurityTeal.copy(alpha = 0.15f),
-    onPrimaryContainer = SecurityTeal,
+    primary = Signal.accentDark,
+    onPrimary = Color(0xFF04121F),
+    primaryContainer = Signal.accentDark.copy(alpha = Tint.subtle),
+    onPrimaryContainer = Signal.accentDark,
 
-    secondary = StatusSafe,
-    onSecondary = AbsoluteBlack,
-    secondaryContainer = StatusSafe.copy(alpha = 0.15f),
-    onSecondaryContainer = StatusSafe,
+    secondary = Signal.clearDark,
+    onSecondary = Color(0xFF04140A),
+    secondaryContainer = Signal.clearDark.copy(alpha = Tint.subtle),
+    onSecondaryContainer = Signal.clearDark,
 
-    tertiary = StatusWarning,
-    onTertiary = AbsoluteBlack,
-    tertiaryContainer = StatusWarning.copy(alpha = 0.15f),
-    onTertiaryContainer = StatusWarning,
+    tertiary = Signal.cautionDark,
+    onTertiary = Color(0xFF161200),
+    tertiaryContainer = Signal.cautionDark.copy(alpha = Tint.subtle),
+    onTertiaryContainer = Signal.cautionDark,
 
-    error = StatusRisk,
-    onError = AbsoluteBlack,
-    errorContainer = StatusRisk.copy(alpha = 0.15f),
-    onErrorContainer = StatusRisk,
+    error = Signal.threatDark,
+    onError = Color(0xFF1A0503),
+    errorContainer = Signal.threatDark.copy(alpha = Tint.subtle),
+    onErrorContainer = Signal.threatDark,
 
-    background = OLEDBlack,
-    onBackground = TextPrimary,
+    background = Ink.canvas,
+    onBackground = Ink.textPrimary,
 
-    surface = VantaBlack,
-    onSurface = TextPrimary,
-    surfaceVariant = SurfaceElevated,
-    onSurfaceVariant = TextTertiary,
+    surface = Ink.surface,
+    onSurface = Ink.textPrimary,
+    surfaceVariant = Ink.surfaceHigh,
+    onSurfaceVariant = Ink.textSecondary,
 
-    outline = HairlineBorder,
-    outlineVariant = SurfaceGlassBorder,
+    surfaceContainerLowest = Ink.canvas,
+    surfaceContainerLow = Ink.surface,
+    surfaceContainer = Ink.surfaceHigh,
+    surfaceContainerHigh = Ink.surfaceMax,
+    surfaceContainerHighest = Ink.surfaceMax,
 
-    scrim = AbsoluteBlack.copy(alpha = 0.8f),
+    outline = Ink.hairlineStrong,
+    outlineVariant = Ink.hairline,
+
+    scrim = Color.Black.copy(alpha = 0.6f),
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = SecurityTealDim,
+    primary = Signal.accentLight,
     onPrimary = Color.White,
-    primaryContainer = SecurityTeal.copy(alpha = 0.1f),
-    onPrimaryContainer = SecurityTealDim,
+    primaryContainer = Signal.accentLight.copy(alpha = Tint.subtle),
+    onPrimaryContainer = Signal.accentLight,
 
-    secondary = Color(0xFF059669),
+    secondary = Signal.clearLight,
     onSecondary = Color.White,
-    secondaryContainer = StatusSafe.copy(alpha = 0.1f),
-    onSecondaryContainer = Color(0xFF059669),
+    secondaryContainer = Signal.clearLight.copy(alpha = Tint.subtle),
+    onSecondaryContainer = Signal.clearLight,
 
-    tertiary = Color(0xFFD97706),
+    tertiary = Signal.cautionLight,
     onTertiary = Color.White,
-    tertiaryContainer = StatusWarning.copy(alpha = 0.1f),
-    onTertiaryContainer = Color(0xFFD97706),
+    tertiaryContainer = Signal.cautionLight.copy(alpha = Tint.subtle),
+    onTertiaryContainer = Signal.cautionLight,
 
-    error = Color(0xFFDC2626),
+    error = Signal.threatLight,
     onError = Color.White,
-    errorContainer = StatusRisk.copy(alpha = 0.1f),
-    onErrorContainer = Color(0xFFDC2626),
+    errorContainer = Signal.threatLight.copy(alpha = Tint.subtle),
+    onErrorContainer = Signal.threatLight,
 
-    background = LightSurface,
-    onBackground = Color(0xFF1C1C1E),
+    background = Paper.canvas,
+    onBackground = Paper.textPrimary,
 
-    surface = LightSurfaceElevated,
-    onSurface = Color(0xFF1C1C1E),
-    surfaceVariant = LightSurfaceGlass,
-    onSurfaceVariant = Color(0xFF636366),
+    surface = Paper.surface,
+    onSurface = Paper.textPrimary,
+    surfaceVariant = Paper.surfaceHigh,
+    onSurfaceVariant = Paper.textSecondary,
 
-    outline = Color(0xFFD1D1D6),
-    outlineVariant = Color(0xFFE5E5EA),
+    surfaceContainerLowest = Color.White,
+    surfaceContainerLow = Paper.canvas,
+    surfaceContainer = Paper.surfaceHigh,
+    surfaceContainerHigh = Paper.surfaceMax,
+    surfaceContainerHighest = Paper.surfaceMax,
+
+    outline = Paper.hairlineStrong,
+    outlineVariant = Paper.hairline,
+
+    scrim = Color.Black.copy(alpha = 0.35f),
 )
 
-// ── Premium Typography Scale ─────────────────────────────────────────────────
-private val PremiumTypography = Typography(
-    // Display styles — massive, editorial
-    displayLarge = Typography().displayLarge.copy(
-        fontFamily = PlusJakartaFamily,
-        fontWeight = FontWeight.ExtraBold,
-        letterSpacing = (-2.5).sp,
-    ),
-    displayMedium = Typography().displayMedium.copy(
-        fontFamily = PlusJakartaFamily,
-        fontWeight = FontWeight.ExtraBold,
-        letterSpacing = (-1.8).sp,
-    ),
-    displaySmall = Typography().displaySmall.copy(
-        fontFamily = PlusJakartaFamily,
-        fontWeight = FontWeight.Bold,
-        letterSpacing = (-1.2).sp,
-    ),
+// ── Typography ───────────────────────────────────────────────────────
 
-    // Headlines — tight tracking, substantial weight
-    headlineLarge = Typography().headlineLarge.copy(
-        fontFamily = PlusJakartaFamily,
-        fontWeight = FontWeight.ExtraBold,
-        fontSize = 32.sp,
-        letterSpacing = (-1.2).sp,
-        lineHeight = 40.sp,
-    ),
-    headlineMedium = Typography().headlineMedium.copy(
-        fontFamily = PlusJakartaFamily,
-        fontWeight = FontWeight.Bold,
-        fontSize = 26.sp,
-        letterSpacing = (-0.8).sp,
-        lineHeight = 32.sp,
-    ),
-    headlineSmall = Typography().headlineSmall.copy(
-        fontFamily = PlusJakartaFamily,
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 20.sp,
-        letterSpacing = (-0.5).sp,
-        lineHeight = 28.sp,
-    ),
-
-    // Titles — clean, authoritative
-    titleLarge = Typography().titleLarge.copy(
-        fontFamily = PlusJakartaFamily,
-        fontWeight = FontWeight.Bold,
-        fontSize = 20.sp,
-        letterSpacing = (-0.3).sp,
-        lineHeight = 28.sp,
-    ),
-    titleMedium = Typography().titleMedium.copy(
-        fontFamily = PlusJakartaFamily,
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 17.sp,
-        letterSpacing = (-0.2).sp,
-        lineHeight = 24.sp,
-    ),
-    titleSmall = Typography().titleSmall.copy(
-        fontFamily = PlusJakartaFamily,
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 14.sp,
-        letterSpacing = (-0.1).sp,
-        lineHeight = 20.sp,
-    ),
-
-    // Body — comfortable reading
-    bodyLarge = Typography().bodyLarge.copy(
-        fontFamily = PlusJakartaFamily,
-        fontWeight = FontWeight.Normal,
-        fontSize = 16.sp,
-        lineHeight = 24.sp,
-        letterSpacing = (-0.2).sp,
-    ),
-    bodyMedium = Typography().bodyMedium.copy(
-        fontFamily = PlusJakartaFamily,
-        fontWeight = FontWeight.Normal,
-        fontSize = 14.sp,
-        lineHeight = 20.sp,
-        letterSpacing = (-0.1).sp,
-    ),
-    bodySmall = Typography().bodySmall.copy(
-        fontFamily = PlusJakartaFamily,
-        fontWeight = FontWeight.Normal,
-        fontSize = 12.sp,
-        lineHeight = 16.sp,
-        letterSpacing = 0.sp,
-    ),
-
-    // Labels — small, functional
-    labelLarge = Typography().labelLarge.copy(
-        fontFamily = PlusJakartaFamily,
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 14.sp,
-        letterSpacing = (0.1).sp,
-        lineHeight = 20.sp,
-    ),
-    labelMedium = Typography().labelMedium.copy(
-        fontFamily = PlusJakartaFamily,
-        fontWeight = FontWeight.Medium,
-        fontSize = 12.sp,
-        letterSpacing = (0.15).sp,
-        lineHeight = 16.sp,
-    ),
-    labelSmall = Typography().labelSmall.copy(
-        fontFamily = PlusJakartaFamily,
-        fontWeight = FontWeight.Medium,
-        fontSize = 10.sp,
-        letterSpacing = (0.2).sp,
-        lineHeight = 14.sp,
-    ),
+/**
+ * Tracking is size-specific, never one value for everything.
+ *
+ * Letterforms drift apart optically as they grow, so display sizes are pulled
+ * tight (negative tracking) while small labels are opened up slightly. A single
+ * `letterSpacing` applied across a scale is always wrong at one end of it.
+ *
+ * Line height follows the inverse rule: tight on headlines where the eye
+ * travels a short distance, generous on body copy where it has to find the next
+ * line reliably.
+ */
+private val LineHeightTrim = LineHeightStyle(
+    alignment = LineHeightStyle.Alignment.Center,
+    trim = LineHeightStyle.Trim.None
 )
 
-// ── Shape System ─────────────────────────────────────────────────────────────
-// Exaggerated squircle radii for premium feel
-val ShapeExtraLarge = androidx.compose.foundation.shape.RoundedCornerShape(32.dp)
-val ShapeLarge = androidx.compose.foundation.shape.RoundedCornerShape(24.dp)
-val ShapeMedium = androidx.compose.foundation.shape.RoundedCornerShape(20.dp)
-val ShapeSmall = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
-val ShapeExtraSmall = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
-val ShapePill = androidx.compose.foundation.shape.RoundedCornerShape(percent = 50)
+private fun display(size: Int, weight: FontWeight, tracking: Float, leading: Int) = TextStyle(
+    fontFamily = PlusJakartaFamily,
+    fontWeight = weight,
+    fontSize = size.sp,
+    letterSpacing = tracking.sp,
+    lineHeight = leading.sp,
+    lineHeightStyle = LineHeightTrim,
+    platformStyle = PlatformTextStyle(includeFontPadding = false)
+)
 
-// Double-bezel radii calculations
-// Usage: Outer = 24.dp, Inner = calcInnerRadius(24.dp, 6.dp)
-fun calcInnerRadius(outerRadius: androidx.compose.ui.unit.Dp, padding: androidx.compose.ui.unit.Dp): androidx.compose.ui.unit.Dp {
-    return outerRadius - padding
+private val AppTypography = Typography(
+    displayLarge = display(56, FontWeight.ExtraBold, -2.4f, 58),
+    displayMedium = display(44, FontWeight.ExtraBold, -1.8f, 48),
+    displaySmall = display(36, FontWeight.Bold, -1.4f, 40),
+
+    headlineLarge = display(30, FontWeight.Bold, -1.0f, 36),
+    headlineMedium = display(25, FontWeight.Bold, -0.7f, 31),
+    headlineSmall = display(21, FontWeight.SemiBold, -0.5f, 27),
+
+    titleLarge = display(18, FontWeight.SemiBold, -0.3f, 24),
+    titleMedium = display(16, FontWeight.SemiBold, -0.2f, 22),
+    titleSmall = display(14, FontWeight.SemiBold, -0.1f, 19),
+
+    // Body copy sits at 0 tracking and generous leading — this is what people
+    // actually read, and it is the one place where comfort beats compactness.
+    bodyLarge = display(16, FontWeight.Normal, 0f, 25),
+    bodyMedium = display(14, FontWeight.Normal, 0f, 21),
+    bodySmall = display(13, FontWeight.Normal, 0.05f, 19),
+
+    labelLarge = display(14, FontWeight.SemiBold, 0.1f, 18),
+    labelMedium = display(12, FontWeight.Medium, 0.2f, 16),
+    labelSmall = display(11, FontWeight.Medium, 0.35f, 14),
+)
+
+/**
+ * Styles for machine-produced values. Not part of the Material scale because
+ * they are a parallel voice, not a step in the same hierarchy.
+ */
+object MonoType {
+    val large = TextStyle(
+        fontFamily = JetBrainsMonoFamily,
+        fontWeight = FontWeight.Normal,
+        fontSize = 14.sp,
+        letterSpacing = 0.2.sp,
+        lineHeight = 20.sp,
+        platformStyle = PlatformTextStyle(includeFontPadding = false)
+    )
+    val medium = TextStyle(
+        fontFamily = JetBrainsMonoFamily,
+        fontWeight = FontWeight.Normal,
+        fontSize = 12.5.sp,
+        letterSpacing = 0.2.sp,
+        lineHeight = 18.sp,
+        platformStyle = PlatformTextStyle(includeFontPadding = false)
+    )
+    val small = TextStyle(
+        fontFamily = JetBrainsMonoFamily,
+        fontWeight = FontWeight.Normal,
+        fontSize = 11.sp,
+        letterSpacing = 0.3.sp,
+        lineHeight = 15.sp,
+        platformStyle = PlatformTextStyle(includeFontPadding = false)
+    )
 }
 
-// ── Theme Composable ─────────────────────────────────────────────────────────
+// ── Legacy shape aliases ─────────────────────────────────────────────
+// Kept so existing screens compile; all now resolve to the Radius ramp so the
+// app has one shape language rather than seven ad-hoc values.
+val ShapeExtraLarge = Radius.xl
+val ShapeLarge = Radius.lg
+val ShapeMedium = Radius.md
+val ShapeSmall = Radius.sm
+val ShapeExtraSmall = Radius.xs
+val ShapePill = Radius.full
+
+/** Inner radius of a nested shape, so concentric corners stay concentric. */
+fun calcInnerRadius(
+    outerRadius: androidx.compose.ui.unit.Dp,
+    padding: androidx.compose.ui.unit.Dp
+): androidx.compose.ui.unit.Dp = (outerRadius - padding).coerceAtLeast(0.dp)
+
+// ── Theme ────────────────────────────────────────────────────────────
+
 @Composable
 fun DeviceLensTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {
     val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
-
-    val extendedColors = if (darkTheme) {
-        ExtendedColors(
-            // Dark theme glass surfaces
-            surfaceGlass = SurfaceGlass,
-            surfaceGlassHighlight = SurfaceGlassHighlight,
-            surfaceGlassBorder = SurfaceGlassBorder,
-            hairlineBorder = HairlineBorder,
-            hairlineBorderStrong = HairlineBorderStrong,
-            innerHighlight = InnerHighlight,
-
-            // Dark theme mesh
-            meshPurple = MeshPurple,
-            meshTeal = MeshTeal,
-            meshAmber = MeshAmber,
-
-            // Dark theme glows
-            statusSafeGlow = StatusSafeGlow,
-            statusWarningGlow = StatusWarningGlow,
-            statusRiskGlow = StatusRiskGlow,
-            securityTealGlow = SecurityTealGlow,
-
-            // Dark theme text
-            textTertiary = TextTertiary,
-            textQuaternary = TextQuaternary,
-
-            // Dark theme semantic colors
-            statusSafe = StatusSafe,
-            statusWarning = StatusWarning,
-            statusRisk = StatusRisk,
-            securityTeal = SecurityTeal,
-        )
-    } else {
-        ExtendedColors(
-            // Light theme glass surfaces
-            surfaceGlass = LightSurfaceGlass,
-            surfaceGlassHighlight = LightSurfaceGlassHighlight,
-            surfaceGlassBorder = LightSurfaceGlassBorder,
-            hairlineBorder = Color(0xFF000000).copy(alpha = 0.06f),
-            hairlineBorderStrong = Color(0xFF000000).copy(alpha = 0.1f),
-            innerHighlight = Color(0xFFFFFFFF).copy(alpha = 0.8f),
-
-            // Light theme mesh
-            meshPurple = LightMeshPurple,
-            meshTeal = LightMeshTeal,
-            meshAmber = LightMeshAmber,
-
-            // Light theme glows
-            statusSafeGlow = LightStatusSafeGlow,
-            statusWarningGlow = LightStatusWarningGlow,
-            statusRiskGlow = LightStatusRiskGlow,
-            securityTealGlow = LightSecurityTealGlow,
-
-            // Light theme text
-            textTertiary = LightTextTertiary,
-            textQuaternary = LightTextQuaternary,
-
-            // Light theme semantic colors
-            statusSafe = LightStatusSafe,
-            statusWarning = LightStatusWarning,
-            statusRisk = LightStatusRisk,
-            securityTeal = LightSecurityTeal,
-        )
-    }
+    val extendedColors = if (darkTheme) DarkExtended else LightExtended
+    val reducedMotion = rememberReducedMotion()
 
     CompositionLocalProvider(
-        LocalExtendedColors provides extendedColors
+        LocalExtendedColors provides extendedColors,
+        LocalReducedMotion provides reducedMotion
     ) {
         MaterialTheme(
             colorScheme = colorScheme,
-            typography = PremiumTypography,
+            typography = AppTypography,
             content = content
         )
     }
 }
 
-// Helper to access extended colors
 object ExtendedTheme {
     val colors: ExtendedColors
         @Composable

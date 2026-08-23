@@ -1,77 +1,71 @@
 package com.devicelens.app
 
-import android.Manifest
-import android.content.pm.PackageManager
-import android.os.Build
 import android.os.Bundle
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.runtime.*
-import androidx.core.content.ContextCompat
-import com.devicelens.app.data.remote.BackendClient
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import com.devicelens.app.helpers.AppPreferences
 import com.devicelens.app.ui.navigation.DeviceLensNavHost
 import com.devicelens.app.ui.theme.DeviceLensTheme
-import javax.inject.Inject
+import com.devicelens.app.ui.theme.LocalWindowMetrics
+import com.devicelens.app.ui.theme.WindowMetrics
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
-    @Inject lateinit var backendClient: BackendClient
-
-    private val requestPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        val allGranted = permissions.entries.all { it.value }
-        if (!allGranted) {
-            Toast.makeText(this, "Permissions required for scanning", Toast.LENGTH_LONG).show()
-        }
-    }
+    @Inject lateinit var appPreferences: AppPreferences
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        checkAndRequestPermissions()
+
+        // Permissions are deliberately NOT requested here.
+        //
+        // The previous build threw the system location and Bluetooth dialogs at
+        // people during the first frame, before they had read a single word about
+        // what the app does. For an app whose entire pitch is "we protect your
+        // privacy", opening with an unexplained demand for location access is the
+        // worst possible first impression — and the denial it earns is permanent.
+        //
+        // Onboarding now explains what each permission is for, in context, and
+        // asks only once the user knows why. See PermissionStep in OnboardingScreen.
+
         setContent {
             DeviceLensTheme {
-                var isLoggedIn by remember { mutableStateOf(backendClient.isLoggedIn()) }
-                
-                DeviceLensNavHost(
-                    isLoggedIn = isLoggedIn,
-                    onLoginSuccess = { isLoggedIn = true }
-                )
+                // Measured rather than assumed, so a folded foldable, a split-screen
+                // window and a small phone all get the layout that fits, instead of
+                // being classified by device type.
+                BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                    val metrics = WindowMetrics(
+                        widthDp = maxWidth.value.toInt(),
+                        heightDp = maxHeight.value.toInt()
+                    )
+
+                    CompositionLocalProvider(LocalWindowMetrics provides metrics) {
+                        var onboardingComplete by remember {
+                            mutableStateOf(appPreferences.onboardingComplete)
+                        }
+
+                        DeviceLensNavHost(
+                            onboardingComplete = onboardingComplete,
+                            onOnboardingFinished = {
+                                appPreferences.onboardingComplete = true
+                                onboardingComplete = true
+                            }
+                        )
+                    }
+                }
             }
-        }
-    }
-
-    private fun checkAndRequestPermissions() {
-        val permissions = mutableListOf<String>()
-        
-        // Basic Location (Required for Wi-Fi/BLE on most versions)
-        permissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
-        permissions.add(Manifest.permission.ACCESS_COARSE_LOCATION)
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            // Android 12+ Bluetooth permissions
-            permissions.add(Manifest.permission.BLUETOOTH_SCAN)
-            permissions.add(Manifest.permission.BLUETOOTH_CONNECT)
-        }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            // Android 13+ Wi-Fi permissions
-            permissions.add(Manifest.permission.NEARBY_WIFI_DEVICES)
-            permissions.add(Manifest.permission.POST_NOTIFICATIONS)
-        }
-
-        val missingPermissions = permissions.filter {
-            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
-        }
-
-        if (missingPermissions.isNotEmpty()) {
-            requestPermissionLauncher.launch(missingPermissions.toTypedArray())
         }
     }
 }

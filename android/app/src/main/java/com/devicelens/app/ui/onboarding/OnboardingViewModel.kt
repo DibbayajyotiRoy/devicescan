@@ -1,67 +1,61 @@
 package com.devicelens.app.ui.onboarding
 
+import android.content.Context
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
-import com.devicelens.app.data.remote.BackendClient
-import com.devicelens.app.domain.auth.GoogleAuthManager
+import com.devicelens.app.helpers.AppPreferences
 import com.devicelens.app.helpers.DebugLog
-import com.google.android.gms.auth.api.signin.GoogleSignInAccount
-import com.google.android.gms.tasks.Task
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+/**
+ * State for the intro flow.
+ *
+ * Notably smaller than it used to be. Onboarding no longer authenticates
+ * anybody: the Google sign-in that used to gate the whole app now lives in
+ * Settings, next to the cloud-intelligence toggle it actually belongs to. What
+ * is left is permissions, which is the only thing the scanner genuinely cannot
+ * start without.
+ */
 @HiltViewModel
 class OnboardingViewModel @Inject constructor(
-    private val googleAuthManager: GoogleAuthManager,
-    private val backendClient: BackendClient
+    private val appPreferences: AppPreferences
 ) : ViewModel() {
 
     private val TAG = "OnboardingViewModel"
 
-    private val _uiState = MutableStateFlow<OnboardingUiState>(OnboardingUiState.Idle)
-    val uiState: StateFlow<OnboardingUiState> = _uiState
-
-    fun getSignInIntent() = googleAuthManager.getSignInIntent()
-
-    fun handleSignInResult(task: Task<GoogleSignInAccount>, onComplete: () -> Unit) {
-        viewModelScope.launch {
-            _uiState.value = OnboardingUiState.Loading
-            val signInOutcome = googleAuthManager.handleSignInResultDetailed(task)
-            when (signInOutcome) {
-                is GoogleAuthManager.SignInOutcome.Success -> {
-                    val result = backendClient.loginWithGoogle(signInOutcome.idToken)
-                    when (result) {
-                        is BackendClient.LoginResult.Success -> {
-                            _uiState.value = OnboardingUiState.Success
-                            onComplete()
-                        }
-                        is BackendClient.LoginResult.Failure -> {
-                            DebugLog.w(TAG, "Backend login failed: ${result.message} (http=${result.httpCode})")
-                            _uiState.value = OnboardingUiState.Error(result.message)
-                        }
-                    }
-                }
-                is GoogleAuthManager.SignInOutcome.Cancelled -> {
-                    _uiState.value = OnboardingUiState.Idle
-                }
-                is GoogleAuthManager.SignInOutcome.Failure -> {
-                    _uiState.value = OnboardingUiState.Error(signInOutcome.message)
-                }
+    /** Current grant state for every permission the intro asks about. */
+    fun permissionStates(context: Context): Map<String, Boolean> =
+        permissionAsks()
+            .flatMap { it.permissions }
+            .associateWith { permission ->
+                ContextCompat.checkSelfPermission(context, permission) ==
+                    PackageManager.PERMISSION_GRANTED
             }
-        }
-    }
 
-    fun onSignInCancelled() {
-        _uiState.value = OnboardingUiState.Idle
-    }
-}
+    /**
+     * True once the permissions the scanner needs are in place.
+     *
+     * Optional permissions are excluded deliberately: notifications being off
+     * must not make the "start scanning" button unreachable.
+     */
+    fun essentialPermissionsGranted(context: Context): Boolean =
+        permissionAsks()
+            .filter { it.required }
+            .flatMap { it.permissions }
+            .all { permission ->
+                ContextCompat.checkSelfPermission(context, permission) ==
+                    PackageManager.PERMISSION_GRANTED
+            }
 
-sealed class OnboardingUiState {
-    data object Idle : OnboardingUiState()
-    data object Loading : OnboardingUiState()
-    data object Success : OnboardingUiState()
-    data class Error(val message: String) : OnboardingUiState()
+    fun onPermissionResult(result: Map<String, Boolean>) {
+        // Remembering that we have asked lets the rest of the app offer a route
+        // into system settings instead of re-requesting, which Android silently
+        // ignores after a permanent denial.
+        appPreferences.hasRequestedPermissions = true
+        val granted = result.filterValues { it }.keys
+        val denied = result.filterValues { !it }.keys
+        DebugLog.i(TAG, "Permissions granted=$granted denied=$denied")
+    }
 }

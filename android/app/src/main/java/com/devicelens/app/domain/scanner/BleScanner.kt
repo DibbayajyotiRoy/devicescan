@@ -9,6 +9,7 @@ import com.devicelens.app.domain.classification.OuiLookup
 import com.devicelens.app.helpers.DebugLog
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.ConcurrentHashMap
@@ -19,7 +20,8 @@ import kotlin.coroutines.resume
 class BleScanner @Inject constructor(
     @ApplicationContext private val context: Context,
     private val bluetoothAdapter: BluetoothAdapter?,
-    private val ouiLookup: OuiLookup
+    private val ouiLookup: OuiLookup,
+    private val advertParser: BleAdvertParser
 ) {
     private val scanMutex = Mutex()
     private val TAG = "BleScanner"
@@ -33,31 +35,18 @@ class BleScanner @Inject constructor(
         val address: String,
         val name: String?,
         val rssi: Int,
-        val vendor: String
-    )
+        val vendor: String,
+        /** Everything the advertisement itself declared — see [BleAdvertParser]. */
+        val advert: BleAdvertParser.Advert? = null
+    ) {
+        val isTracker: Boolean get() = advert?.isTracker == true
+        val trackerLabel: String? get() = advert?.tracker?.label
+        val deviceClassHint: String? get() = advert?.deviceClassHint
+        /** The MAC is disposable, so it must not be used as an identity or a vendor source. */
+        val hasRandomAddress: Boolean get() = advert?.isRandomAddress ?: true
+    }
 
     @Volatile private var activeCallback: ScanCallback? = null
-
-    // BLE advertisers use randomised MACs, so OUI lookup almost always fails.
-    // The 16-bit company identifier in the manufacturer-specific advertising data
-    // is the one reliable vendor signal that survives MAC randomisation.
-    private val bleCompanyNames = mapOf(
-        0x004C to "Apple",
-        0x0006 to "Microsoft",
-        0x00E0 to "Google",
-        0x0075 to "Samsung",
-        0x0087 to "Garmin",
-        0x0171 to "Amazon",
-        0x0157 to "Xiaomi",
-        0x0059 to "Nordic Semiconductor",
-        0x000D to "Texas Instruments",
-        0x000F to "Broadcom"
-    )
-
-    private fun bleCompanyVendor(msd: android.util.SparseArray<ByteArray>?): String? {
-        if (msd == null || msd.size() == 0) return null
-        return bleCompanyNames[msd.keyAt(0)]
-    }
 
     suspend fun scan(durationMs: Long = 8000): BleScanResult = scanMutex.withLock {
         DebugLog.i(TAG, "Starting BLE scan (duration: ${durationMs}ms)…")
@@ -84,7 +73,18 @@ class BleScanner @Inject constructor(
         return@withLock withTimeoutOrNull(durationMs + 2000) {
             suspendCancellableCoroutine { continuation ->
                 val settings = ScanSettings.Builder()
-                    .setScanMode(ScanSettings.SCAN_MODE_BALANCED)
+                    // Trackers advertise on a slow interval to save battery; a
+                    // balanced scan simply misses them inside a short window.
+                    .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+                    .apply {
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                            // Report every advertisement, not one summary per
+                            // device, so RSSI reflects the closest approach.
+                            setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
+                            setMatchMode(ScanSettings.MATCH_MODE_AGGRESSIVE)
+                            setNumOfMatches(ScanSettings.MATCH_NUM_MAX_ADVERTISEMENT)
+                        }
+                    }
                     .build()
 
                 // The continuation can be reached from three different threads:
@@ -117,27 +117,53 @@ class BleScanner @Inject constructor(
                 val callback = object : ScanCallback() {
                     override fun onScanResult(callbackType: Int, result: ScanResult) {
                         val device = result.device
-                        val name = try {
-                            device.name ?: result.scanRecord?.deviceName
-                        } catch (e: SecurityException) {
-                            null
-                        }
                         val address = device.address
-                        val ouiVendor = ouiLookup.lookup(address)
-                        // Fall back to the BLE manufacturer company-id when the
-                        // (usually randomised) MAC isn't in the OUI table.
-                        val vendor = if (ouiVendor != "Unknown") ouiVendor
-                            else bleCompanyVendor(result.scanRecord?.manufacturerSpecificData) ?: "Unknown"
-                        val isNew = !results.containsKey(address)
+                        val advert = advertParser.parse(
+                            result.scanRecord,
+                            address,
+                            connectable = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                                result.isConnectable
+                            } else true
+                        )
 
+                        val name = try {
+                            device.name ?: advert.localName
+                        } catch (e: SecurityException) {
+                            advert.localName
+                        }
+
+                        // A randomised address carries no vendor information, so
+                        // the OUI table is only consulted for public addresses;
+                        // otherwise the company ID in the advertisement is the
+                        // one vendor signal that survives MAC rotation.
+                        val ouiVendor = if (advert.isRandomAddress) "Unknown" else ouiLookup.lookup(address)
+                        val vendor = when {
+                            ouiVendor != "Unknown" -> ouiVendor
+                            advert.companyName != null -> advert.companyName
+                            else -> "Unknown"
+                        }
+
+                        val previous = results[address]
+                        val isNew = previous == null
                         results[address] = BleDevice(
                             address = address,
-                            name = name,
-                            rssi = result.rssi,
-                            vendor = vendor
+                            // Later advertisements are often name-less; never let
+                            // one erase a name an earlier packet already gave us.
+                            name = name ?: previous?.name,
+                            // Keep the strongest reading: it is the closest the
+                            // device came, which is what Locate Mode needs.
+                            rssi = maxOf(result.rssi, previous?.rssi ?: Int.MIN_VALUE),
+                            vendor = if (vendor != "Unknown") vendor else previous?.vendor ?: "Unknown",
+                            advert = if (advert.tracker != null || previous?.advert == null) advert else previous.advert
                         )
+
                         if (isNew) {
-                            DebugLog.i(TAG, "BLE device: $address name=${name ?: "n/a"} rssi=${result.rssi} vendor=$vendor")
+                            DebugLog.i(
+                                TAG,
+                                "BLE device: $address name=${name ?: "n/a"} rssi=${result.rssi} " +
+                                    "vendor=$vendor class=${advert.deviceClassHint ?: "?"} " +
+                                    "tracker=${advert.tracker?.label ?: "no"} random=${advert.isRandomAddress}"
+                            )
                         }
                     }
 
@@ -182,5 +208,63 @@ class BleScanner @Inject constructor(
         } catch (e: Exception) {
             DebugLog.w(TAG, "Error in explicit stopScan: ${e.message}")
         }
+    }
+}
+
+/**
+ * A live RSSI feed for one specific device.
+ *
+ * Locate Mode needs a continuously updating signal strength, and the previous
+ * implementation only re-read the database every three seconds — nothing ever
+ * refreshed the stored value, so the reading never changed and the "warmer /
+ * colder" feedback was always "stable". This runs a real scan filtered to a
+ * single address, which is far cheaper than a full scan and gives a genuine
+ * reading several times a second.
+ */
+fun BleScanner.trackRssi(
+    bluetoothAdapter: android.bluetooth.BluetoothAdapter?,
+    address: String
+): kotlinx.coroutines.flow.Flow<Int> = kotlinx.coroutines.flow.callbackFlow {
+    val scanner = bluetoothAdapter?.takeIf { it.isEnabled }?.bluetoothLeScanner
+    if (scanner == null) {
+        close()
+        return@callbackFlow
+    }
+
+    // Filtering in the Bluetooth stack rather than in our callback means the
+    // radio wakes this process only for the one device being hunted.
+    val filter = android.bluetooth.le.ScanFilter.Builder()
+        .setDeviceAddress(address)
+        .build()
+
+    val settings = ScanSettings.Builder()
+        .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+        .apply {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
+                setMatchMode(ScanSettings.MATCH_MODE_AGGRESSIVE)
+            }
+        }
+        .build()
+
+    val callback = object : ScanCallback() {
+        override fun onScanResult(callbackType: Int, result: ScanResult) {
+            trySend(result.rssi)
+        }
+
+        override fun onScanFailed(errorCode: Int) {
+            close()
+        }
+    }
+
+    try {
+        scanner.startScan(listOf(filter), settings, callback)
+    } catch (e: Exception) {
+        close(e)
+        return@callbackFlow
+    }
+
+    awaitClose {
+        try { scanner.stopScan(callback) } catch (_: Exception) {}
     }
 }

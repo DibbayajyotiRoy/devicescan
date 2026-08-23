@@ -19,6 +19,8 @@ class NotificationHelper @Inject constructor(
     companion object {
         private const val CHANNEL_ID = "device_lens_alerts"
         private const val NOTIFICATION_ID = 1001
+        private const val TRACKER_NOTIFICATION_ID = 1002
+        private const val NETWORK_NOTIFICATION_ID = 1003
     }
 
     init {
@@ -64,5 +66,42 @@ class NotificationHelper @Inject constructor(
 
         val manager = context.getSystemService(NotificationManager::class.java)
         manager.notify(NOTIFICATION_ID, notification)
+    }
+
+    /**
+     * The alert that matters most: a Bluetooth tag that has stayed with the user
+     * across several scans. Background scanning exists mainly so this can fire
+     * while the phone is in a pocket, which is exactly when someone would not be
+     * looking for it.
+     */
+    fun postTrackerAlert(headline: String, detail: String) {
+        post(TRACKER_NOTIFICATION_ID, "Possible tracker following you", headline, detail)
+    }
+
+    /** Structural problems with the network — spoofing, rogue DNS, open Wi-Fi. */
+    fun postNetworkAlert(title: String, detail: String) {
+        post(NETWORK_NOTIFICATION_ID, title, detail, detail)
+    }
+
+    private fun post(id: Int, title: String, text: String, expanded: String) {
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            context, id, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_dialog_alert)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(expanded))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+            .build()
+
+        context.getSystemService(NotificationManager::class.java).notify(id, notification)
     }
 }

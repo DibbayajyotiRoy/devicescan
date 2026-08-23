@@ -1,22 +1,83 @@
 package com.devicelens.app.ui.settings
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.CloudOff
+import androidx.compose.material.icons.rounded.ExpandLess
+import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import com.devicelens.app.domain.model.OverallStatus
-import com.devicelens.app.ui.components.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.devicelens.app.ui.components.pressable
+import com.devicelens.app.ui.components.rememberHaptics
+import com.devicelens.app.ui.theme.ExtendedTheme
+import com.devicelens.app.ui.theme.MonoType
+import com.devicelens.app.ui.theme.Motion
+import com.devicelens.app.ui.theme.Radius
+import com.devicelens.app.ui.theme.Space
+import com.devicelens.app.ui.theme.Tint
 
+/**
+ * Settings.
+ *
+ * Two changes of substance beyond the visual pass.
+ *
+ * **Sign-in lives here now**, next to the cloud feature it enables, instead of
+ * gating the whole app at first launch. Presented as what it is — an optional
+ * upgrade — rather than as a toll gate.
+ *
+ * **The detection limits are stated permanently.** They used to appear once, in
+ * a one-time bottom sheet, right when a new user was least equipped to absorb
+ * them and would never see them again. A security tool's limits are exactly the
+ * thing a user needs to be able to re-read later.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsSheet(
@@ -24,34 +85,34 @@ fun SettingsSheet(
     onReset: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
-    val bgScanEnabled by viewModel.backgroundScanEnabled.collectAsState()
-    val cloudEnabled by viewModel.cloudIntelEnabled.collectAsState()
-    val backendHealthy by viewModel.backendHealthy.collectAsState()
-    val isLoggedIn by viewModel.isLoggedIn.collectAsState()
-    val userName by viewModel.userName.collectAsState()
-    val userEmail by viewModel.userEmail.collectAsState()
-    val isLoggingIn by viewModel.isLoggingIn.collectAsState()
-    val loginError by viewModel.loginError.collectAsState()
+    val colors = ExtendedTheme.colors
+    val haptics = rememberHaptics()
+
+    val bgScanEnabled by viewModel.backgroundScanEnabled.collectAsStateWithLifecycle()
+    val cloudEnabled by viewModel.cloudIntelEnabled.collectAsStateWithLifecycle()
+    val backendHealthy by viewModel.backendHealthy.collectAsStateWithLifecycle()
+    val isLoggedIn by viewModel.isLoggedIn.collectAsStateWithLifecycle()
+    val userName by viewModel.userName.collectAsStateWithLifecycle()
+    val userEmail by viewModel.userEmail.collectAsStateWithLifecycle()
+    val isLoggingIn by viewModel.isLoggingIn.collectAsStateWithLifecycle()
+    val loginError by viewModel.loginError.collectAsStateWithLifecycle()
 
     var showResetConfirmation by remember { mutableStateOf(false) }
-
     val snackbarHostState = remember { SnackbarHostState() }
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     val signInLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        viewModel.handleGoogleSignInResult(result.data)
-    }
+    ) { result -> viewModel.handleGoogleSignInResult(result.data) }
 
-    // Show login errors as snackbar
     LaunchedEffect(loginError) {
         loginError?.let {
+            haptics.reject()
             snackbarHostState.showSnackbar(it, duration = SnackbarDuration.Short)
             viewModel.clearLoginError()
         }
     }
 
-    // Check backend health when cloud is enabled
     LaunchedEffect(cloudEnabled) {
         if (cloudEnabled) viewModel.checkBackendHealth()
     }
@@ -59,27 +120,36 @@ fun SettingsSheet(
     if (showResetConfirmation) {
         AlertDialog(
             onDismissRequest = { showResetConfirmation = false },
-            title = { Text("Reset everything?", fontWeight = FontWeight.Bold) },
+            containerColor = colors.surfaceGlassHighlight,
+            shape = Radius.lg,
+            title = {
+                Text(
+                    "Erase everything?",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = colors.textPrimary
+                )
+            },
             text = {
                 Text(
-                    "This will remove all your trusted devices and restart setup. " +
-                            "Your scan history will be cleared."
+                    "Every trusted device, every scan result and the tracker history will be " +
+                        "deleted from this phone. This cannot be undone.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colors.textSecondary
                 )
             },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        showResetConfirmation = false
-                        onReset()
-                        onDismiss()
-                    }
-                ) {
-                    Text("Reset everything", color = MaterialTheme.colorScheme.error)
+                TextButton(onClick = {
+                    haptics.commit()
+                    showResetConfirmation = false
+                    onReset()
+                    onDismiss()
+                }) {
+                    Text("Erase", color = colors.statusRisk)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showResetConfirmation = false }) {
-                    Text("Cancel")
+                    Text("Cancel", color = colors.textSecondary)
                 }
             }
         )
@@ -87,14 +157,30 @@ fun SettingsSheet(
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+        sheetState = sheetState,
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(
+            topStart = Radius.xlDp, topEnd = Radius.xlDp
+        ),
+        containerColor = colors.surfaceGlass,
+        dragHandle = {
+            Box(
+                modifier = Modifier
+                    .padding(vertical = Space.md)
+                    .width(36.dp)
+                    .height(4.dp)
+                    .clip(Radius.full)
+                    .background(colors.hairlineBorderStrong)
+            )
+        }
     ) {
         SnackbarHost(hostState = snackbarHostState)
+
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 40.dp)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = Space.xl)
+                .padding(bottom = Space.x4l)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -103,265 +189,410 @@ fun SettingsSheet(
             ) {
                 Text(
                     text = "Settings",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = colors.textPrimary
                 )
-                
                 if (isLoggedIn) {
-                    TextButton(onClick = viewModel::logout) {
-                        Text("Sign Out", color = MaterialTheme.colorScheme.error)
+                    TextButton(onClick = { haptics.tap(); viewModel.logout() }) {
+                        Text("Sign out", color = colors.statusRisk)
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(Modifier.height(Space.xl))
 
-            // ── User Profile / Login ──────────────────────────
-            Surface(
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                if (isLoggedIn) {
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        Surface(
-                            modifier = Modifier.size(48.dp),
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.primaryContainer
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Text(
-                                    text = userName?.firstOrNull()?.uppercase() ?: "?",
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                                )
-                            }
-                        }
-                        Column {
-                            Text(
-                                text = userName ?: "User",
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = userEmail ?: "",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+            SettingsGroup(label = "Scanning") {
+                SettingToggle(
+                    title = "Background scanning",
+                    description = "Check every 30 minutes while the app is closed, and warn you " +
+                        "if a tracker follows you. Uses the passive radios only.",
+                    checked = bgScanEnabled,
+                    onCheckedChange = {
+                        haptics.select(it)
+                        viewModel.toggleBackgroundScan(it)
                     }
-                } else {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
+                )
+            }
+
+            Spacer(Modifier.height(Space.lg))
+
+            SettingsGroup(label = "Cloud intelligence") {
+                SettingToggle(
+                    title = "Match against known signatures",
+                    description = "Compares device fingerprints against a database of known " +
+                        "spy cameras. Everything else works without this.",
+                    checked = cloudEnabled,
+                    onCheckedChange = {
+                        haptics.select(it)
+                        viewModel.toggleCloudIntelligence(it)
+                    },
+                    badge = when {
+                        !cloudEnabled -> null
+                        backendHealthy == true -> "CONNECTED" to colors.statusSafe
+                        backendHealthy == false -> "UNREACHABLE" to colors.statusWarning
+                        else -> "CHECKING" to colors.textTertiary
+                    }
+                )
+
+                AnimatedVisibility(
+                    visible = cloudEnabled,
+                    enter = fadeIn(Motion.fade()) + expandVertically(),
+                    exit = fadeOut(Motion.fade()) + shrinkVertically()
+                ) {
+                    Column {
+                        RowDivider()
+                        // Stated precisely, because a vague privacy promise is
+                        // worth nothing: name the fields that leave the device.
                         Text(
-                            text = "Cloud Sync & Backup",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = "Sign in to sync your trusted devices and help improve global threat intelligence.",
+                            text = "Sent: the first 3 bytes of a MAC address, open port numbers, " +
+                                "and HTTP banner text.\nNever sent: full MAC addresses, your IP, " +
+                                "your location, your network name, or anything about you.",
                             style = MaterialTheme.typography.bodySmall,
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        
-                        Button(
-                            onClick = { signInLauncher.launch(viewModel.getGoogleSignInIntent()) },
-                            enabled = !isLoggingIn,
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primary
-                            )
-                        ) {
-                            if (isLoggingIn) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(20.dp),
-                                    strokeWidth = 2.dp,
-                                    color = MaterialTheme.colorScheme.onPrimary
-                                )
-                            } else {
-                                Text("Sign in with Google")
-                            }
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // ── Scanning group ──────────────────────────────────
-            Surface(
-                shape = RoundedCornerShape(14.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    // Background scanning toggle
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Background scanning",
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Medium
-                            )
-                            Text(
-                                text = "Periodically scan while app is closed",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Switch(
-                            checked = bgScanEnabled,
-                            onCheckedChange = viewModel::toggleBackgroundScan
+                            color = colors.textTertiary,
+                            modifier = Modifier.padding(Space.lg)
                         )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(Modifier.height(Space.lg))
 
-            // ── Cloud Intelligence group ────────────────────────
-            Surface(
-                shape = RoundedCornerShape(14.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Text(
-                                    text = "Cloud intelligence",
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    fontWeight = FontWeight.Medium
-                                )
-                                if (cloudEnabled && backendHealthy != null) {
-                                    Surface(
-                                        shape = RoundedCornerShape(4.dp),
-                                        color = if (backendHealthy == true)
-                                            MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-                                        else
-                                            MaterialTheme.colorScheme.error.copy(alpha = 0.12f)
-                                    ) {
-                                        Text(
-                                            text = if (backendHealthy == true) "Connected" else "Offline",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.Bold,
-                                            color = if (backendHealthy == true)
-                                                MaterialTheme.colorScheme.primary
-                                            else
-                                                MaterialTheme.colorScheme.error,
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                        )
-                                    }
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = "Match devices against known spy camera signatures",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Switch(
-                            checked = cloudEnabled,
-                            onCheckedChange = viewModel::toggleCloudIntelligence
-                        )
-                    }
-
-                    if (cloudEnabled) {
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Surface(
-                            color = MaterialTheme.colorScheme.background.copy(alpha = 0.6f),
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            Text(
-                                text = "Only device fingerprints (MAC prefix, open ports, HTTP banner) are sent. " +
-                                       "No personal data, IP addresses, or location is shared.",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                modifier = Modifier.padding(10.dp)
-                            )
-                        }
-                    }
+            AccountCard(
+                isLoggedIn = isLoggedIn,
+                userName = userName,
+                userEmail = userEmail,
+                isLoggingIn = isLoggingIn,
+                onSignIn = {
+                    haptics.tap()
+                    signInLauncher.launch(viewModel.getGoogleSignInIntent())
                 }
-            }
+            )
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(Modifier.height(Space.lg))
 
-            // ── Danger zone ─────────────────────────────────────
+            DetectionLimits()
+
+            Spacer(Modifier.height(Space.lg))
+
             Surface(
-                shape = RoundedCornerShape(14.dp),
-                color = MaterialTheme.colorScheme.error.copy(alpha = 0.04f),
-                modifier = Modifier.fillMaxWidth()
+                color = colors.statusRisk.copy(alpha = Tint.faint),
+                shape = Radius.md,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .pressable(onClick = { showResetConfirmation = true }, pressScale = 0.99f)
             ) {
-                TextButton(
-                    onClick = { showResetConfirmation = true },
+                Text(
+                    text = "Erase all data",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = colors.statusRisk,
+                    textAlign = TextAlign.Center,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 4.dp),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
-                ) {
-                    Text(
-                        text = "Reset all trusted devices",
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // ── About ───────────────────────────────────────────
-            Column(
-                modifier = Modifier.padding(horizontal = 4.dp)
-            ) {
-                Text(
-                    text = "About",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Device Lens v1.0.0",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = if (cloudEnabled)
-                        "Cloud intelligence is active. Only device signatures are shared."
-                    else
-                        "Fully offline. No data leaves your device.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                )
-                Text(
-                    text = "Vendor identification uses a locally bundled database.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        .padding(vertical = Space.lg)
                 )
             }
         }
     }
 }
+
+// ─────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun SettingsGroup(
+    label: String,
+    content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit
+) {
+    val colors = ExtendedTheme.colors
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = label.uppercase(),
+            style = MaterialTheme.typography.labelSmall,
+            color = colors.textTertiary
+        )
+        Spacer(Modifier.height(Space.sm))
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(Radius.md)
+                .background(colors.surfaceGlassHighlight)
+                .border(1.dp, colors.hairlineBorder, Radius.md),
+            content = content
+        )
+    }
+}
+
+@Composable
+private fun SettingToggle(
+    title: String,
+    description: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    badge: Pair<String, Color>? = null
+) {
+    val colors = ExtendedTheme.colors
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .pressable(
+                onClick = { onCheckedChange(!checked) },
+                pressScale = 0.995f,
+                hapticOnPress = false
+            )
+            .padding(Space.lg),
+        verticalAlignment = Alignment.Top
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = colors.textPrimary
+                )
+                badge?.let { (text, color) ->
+                    Spacer(Modifier.width(Space.sm))
+                    Text(
+                        text = text,
+                        style = MonoType.small,
+                        color = color,
+                        modifier = Modifier
+                            .clip(Radius.xs)
+                            .background(color.copy(alpha = Tint.subtle))
+                            .padding(horizontal = Space.sm, vertical = 2.dp)
+                    )
+                }
+            }
+            Spacer(Modifier.height(Space.xs))
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.textTertiary
+            )
+        }
+
+        Spacer(Modifier.width(Space.lg))
+
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                uncheckedThumbColor = colors.textTertiary,
+                uncheckedTrackColor = colors.surfaceGlass,
+                uncheckedBorderColor = colors.hairlineBorderStrong
+            )
+        )
+    }
+}
+
+@Composable
+private fun RowDivider() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(1.dp)
+            .background(ExtendedTheme.colors.hairlineBorder)
+    )
+}
+
+/**
+ * The account card.
+ *
+ * Framed as optional throughout — the heading says what signing in *adds*,
+ * never what not signing in costs you. The scanner is complete without it and
+ * the copy should not imply otherwise.
+ */
+@Composable
+private fun AccountCard(
+    isLoggedIn: Boolean,
+    userName: String?,
+    userEmail: String?,
+    isLoggingIn: Boolean,
+    onSignIn: () -> Unit
+) {
+    val colors = ExtendedTheme.colors
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = "ACCOUNT",
+            style = MaterialTheme.typography.labelSmall,
+            color = colors.textTertiary
+        )
+        Spacer(Modifier.height(Space.sm))
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(Radius.md)
+                .background(colors.surfaceGlassHighlight)
+                .border(1.dp, colors.hairlineBorder, Radius.md)
+                .padding(Space.lg)
+        ) {
+            if (isLoggedIn) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = Tint.medium)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = userName?.firstOrNull()?.uppercase() ?: "?",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    Spacer(Modifier.width(Space.lg))
+                    Column {
+                        Text(
+                            text = userName ?: "Signed in",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = colors.textPrimary
+                        )
+                        userEmail?.let {
+                            Text(
+                                text = it,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = colors.textTertiary
+                            )
+                        }
+                    }
+                }
+            } else {
+                Text(
+                    text = "Sync across devices",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = colors.textPrimary
+                )
+                Spacer(Modifier.height(Space.xs))
+                Text(
+                    text = "Optional. Signing in keeps your trusted devices across phones. " +
+                        "Scanning works exactly the same without an account.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.textTertiary
+                )
+                Spacer(Modifier.height(Space.lg))
+
+                Surface(
+                    color = colors.surfaceGlass,
+                    shape = Radius.sm,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, colors.hairlineBorderStrong, Radius.sm)
+                        .pressable(onClick = onSignIn, enabled = !isLoggingIn, pressScale = 0.98f)
+                ) {
+                    Box(
+                        modifier = Modifier.padding(vertical = Space.md),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (isLoggingIn) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                                color = colors.securityTeal
+                            )
+                        } else {
+                            Text(
+                                text = "Sign in with Google",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = colors.textPrimary
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * What the app cannot do.
+ *
+ * Permanent and expandable, rather than a one-time popup that appeared before
+ * the user had any context for it. Someone deciding whether to trust a clear
+ * result needs to know what a clear result does not rule out, and they need to
+ * be able to find that out on the day they are worried — not on install day.
+ */
+@Composable
+private fun DetectionLimits() {
+    val colors = ExtendedTheme.colors
+    var expanded by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(Radius.md)
+            .background(colors.surfaceGlassHighlight)
+            .border(1.dp, colors.hairlineBorder, Radius.md)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .pressable(onClick = { expanded = !expanded }, pressScale = 0.995f)
+                .padding(Space.lg),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.CloudOff,
+                contentDescription = null,
+                tint = colors.textTertiary,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(Modifier.width(Space.md))
+            Text(
+                text = "What this can't detect",
+                style = MaterialTheme.typography.titleSmall,
+                color = colors.textPrimary,
+                modifier = Modifier.weight(1f)
+            )
+            Icon(
+                imageVector = if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
+                contentDescription = null,
+                tint = colors.textTertiary,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+
+        AnimatedVisibility(
+            visible = expanded,
+            enter = fadeIn(Motion.fade()) + expandVertically(),
+            exit = fadeOut(Motion.fade()) + shrinkVertically()
+        ) {
+            Column(modifier = Modifier.padding(horizontal = Space.lg).padding(bottom = Space.lg)) {
+                limitations.forEach { limitation ->
+                    Row(
+                        modifier = Modifier.padding(vertical = Space.sm),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Text(
+                            text = "—",
+                            style = MonoType.small,
+                            color = colors.textQuaternary
+                        )
+                        Spacer(Modifier.width(Space.sm))
+                        Text(
+                            text = limitation,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colors.textSecondary
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+private val limitations = listOf(
+    "A device that is switched off, or recording to a local card without transmitting, " +
+        "broadcasts nothing — so nothing can find it over the air.",
+    "A camera on a different network from yours will not appear in a Wi-Fi scan. Check " +
+        "the Bluetooth results, and look physically.",
+    "Bluetooth trackers rotate their identity periodically. A tag separated from its " +
+        "owner rotates slowly and is detectable; one still with its owner may not be.",
+    "Android hides the ARP table from apps, so some devices will show an address but no " +
+        "manufacturer.",
+    "A clear result means nothing suspicious was broadcasting during the scan. It is " +
+        "not a guarantee that a room is clean."
+)

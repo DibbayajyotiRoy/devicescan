@@ -82,6 +82,9 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material:material-icons-extended")
+    // Drives the adaptive layouts: compact phones, foldables and tablets each
+    // get a layout suited to them rather than one stretched design.
+    implementation("androidx.compose.material3:material3-window-size-class")
     implementation("androidx.activity:activity-compose:1.9.0")
     debugImplementation("androidx.compose.ui:ui-tooling")
 

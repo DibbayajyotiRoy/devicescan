@@ -82,17 +82,17 @@ class DeviceFingerprinter @Inject constructor() {
         // 3. Spy Camera Protocol Probes (UDP)
         if (probeTuyaUdp(ip)) {
             respondsTuya = true
-            signals.add("⚠️ Responds to Tuya/SmartLife protocol (UDP 6666)")
+            signals.add("Responds to the Tuya/SmartLife protocol (UDP 6666)")
             DebugLog.i(TAG, "$ip ★★ Tuya protocol detected — likely IoT camera/device")
         }
         if (probeXmeyeUdp(ip)) {
             respondsXmeye = true
-            signals.add("🚨 Responds to XMEye/DVR protocol (UDP 34567)")
+            signals.add("Responds to the XMEye video-recorder protocol (UDP 34567)")
             DebugLog.i(TAG, "$ip ★★★ XMEye protocol detected — camera/DVR confirmed")
         }
         if (probeTutkP2p(ip)) {
             respondsTutk = true
-            signals.add("⚠️ Responds to TUTK P2P camera protocol (UDP 32100)")
+            signals.add("Responds to the TUTK peer-to-peer camera protocol (UDP 32100)")
             DebugLog.i(TAG, "$ip ★★ TUTK P2P detected — likely IP camera")
         }
 
@@ -345,63 +345,63 @@ class DeviceFingerprinter @Inject constructor() {
         val signalText = signals.joinToString(" ").lowercase()
 
         // ── Router / Gateway (check FIRST to prevent false camera positives) ──
-        if (isGateway) return "🌐 Router/Gateway"
-        if (openPorts.containsAll(listOf(80, 23)) && openPorts.size <= 5) return "🌐 Router"
+        if (isGateway) return "Router/Gateway"
+        if (openPorts.containsAll(listOf(80, 23)) && openPorts.size <= 5) return "Router"
         if (listOf("router", "gateway", "modem", "vxworks", "ac10", "ac15", "tenda", "netgear", "tp-link")
-                .any { it in "$s $t" }) return "🌐 Router"
+                .any { it in "$s $t" }) return "Router"
 
         // ── Camera / Surveillance (strongest protocol signals) ──
-        if (signals.any { "xmeye" in it.lowercase() || "dvr protocol" in it.lowercase() }) return "🚨 Camera/DVR (XMEye)"
-        if (signals.any { "tutk" in it.lowercase() }) return "🚨 Camera (P2P)"
-        if (signals.any { "onvif" in it.lowercase() }) return "📹 Camera (ONVIF)"
-        if (openPorts.any { it in listOf(554, 8554) }) return "📹 Camera (RTSP)"
-        if (openPorts.contains(34567)) return "🚨 Camera/DVR (XMEye port)"
-        if (openPorts.contains(37777)) return "🚨 Camera/DVR (Dahua port)"
-        if (openPorts.contains(8000) && openPorts.contains(80) && !isGateway) return "📹 Camera (Hikvision port)"
-        if (openPorts.contains(9527)) return "📹 Camera (Chinese IP cam)"
+        if (signals.any { "xmeye" in it.lowercase() || "dvr protocol" in it.lowercase() }) return "Camera/DVR (XMEye protocol)"
+        if (signals.any { "tutk" in it.lowercase() }) return "Camera (P2P protocol)"
+        if (signals.any { "onvif" in it.lowercase() }) return "Camera (ONVIF)"
+        if (openPorts.any { it in listOf(554, 8554) }) return "Camera (RTSP stream)"
+        if (openPorts.contains(34567)) return "Camera/DVR (XMEye port)"
+        if (openPorts.contains(37777)) return "Camera/DVR (Dahua port)"
+        if (openPorts.contains(8000) && openPorts.contains(80) && !isGateway) return "Camera (Hikvision port)"
+        if (openPorts.contains(9527)) return "Camera (IP camera port)"
         // Camera endpoint — only if NOT a router (routers often have /snapshot.cgi)
-        if (signals.any { "camera endpoint" in it.lowercase() }) return "📹 Camera"
+        if (signals.any { "camera endpoint" in it.lowercase() }) return "Camera"
         if (listOf("camera", "ipcam", "dvr", "nvr", "surveillance", "live view", "snapshot", "recording")
-                .any { it in "$s $t" }) return "📹 Camera"
+                .any { it in "$s $t" }) return "Camera"
 
         // ── Embedded Web Servers (very strong spy camera signal) ──
         if (listOf("goahead", "goahead-webs", "goahead-http", "mini_httpd", "mini-httpd",
                    "boa", "thttpd", "uhttpd", "lighttpd/1.4")
-                .any { it in s }) return "📹 Possible Camera (Embedded Server)"
+                .any { it in s }) return "Possible camera (embedded web server)"
 
         // ── Tuya IoT device ──
-        if (signals.any { "tuya" in it.lowercase() }) return "⚠️ IoT Device (Tuya)"
-        if (openPorts.any { it in listOf(6666, 6667) }) return "⚠️ IoT Device (Tuya port)"
+        if (signals.any { "tuya" in it.lowercase() }) return "IoT device (Tuya)"
+        if (openPorts.any { it in listOf(6666, 6667) }) return "IoT device (Tuya port)"
 
         // ── Xiaomi / Mi Home IoT ──
-        if ("udp 54321" in signalText) return "📡 Xiaomi/Mi Home Device"
+        if ("udp 54321" in signalText) return "Smart home device (Xiaomi)"
 
         // ── Smart TV / Media ──
         if (listOf("tv", "bravia", "chromecast", "cast", "roku", "apple tv", "fire tv", "airplay", "crystal uhd")
-                .any { it in "$s $t" }) return "📺 Media Device"
+                .any { it in "$s $t" }) return "Media device"
 
         // ── Audio ──
         if (listOf("sonos", "speaker", "alexa", "echo", "home speaker")
-                .any { it in "$s $t" }) return "🔊 Speaker"
+                .any { it in "$s $t" }) return "Speaker"
 
         // ── Printer ──
-        if (openPorts.any { it in listOf(631, 9100) }) return "🖨️ Printer"
-        if (listOf("printer", "jetdirect", "cups").any { it in "$s $t" }) return "🖨️ Printer"
+        if (openPorts.any { it in listOf(631, 9100) }) return "Printer"
+        if (listOf("printer", "jetdirect", "cups").any { it in "$s $t" }) return "Printer"
 
         // ── NAS / Server ──
-        if (listOf("nas", "synology", "qnap").any { it in "$s $t" }) return "💾 NAS"
-        if (listOf("nginx", "apache", "iis").any { it in s }) return "🖥️ Server"
-        if (openPorts.containsAll(listOf(445, 139))) return "💾 File Server"
+        if (listOf("nas", "synology", "qnap").any { it in "$s $t" }) return "Network storage"
+        if (listOf("nginx", "apache", "iis").any { it in s }) return "Server"
+        if (openPorts.containsAll(listOf(445, 139))) return "File server"
 
         // ── Computer ──
-        if (openPorts.contains(22) && openPorts.any { it in listOf(80, 443) }) return "🖥️ Computer"
-        if (openPorts.contains(3389)) return "🖥️ Computer (RDP)"
+        if (openPorts.contains(22) && openPorts.any { it in listOf(80, 443) }) return "Computer"
+        if (openPorts.contains(3389)) return "Computer (remote desktop)"
 
         // ── Generic IoT ──
-        if (openPorts.size == 1 && openPorts[0] == 80) return "📡 IoT Device"
+        if (openPorts.size == 1 && openPorts[0] == 80) return "IoT device"
 
         // ── Device with services but unclassified ──
-        if (openPorts.isNotEmpty()) return "📡 Network Device"
+        if (openPorts.isNotEmpty()) return "Network device"
 
         // ── Nothing exposed ──
         // A host that answers ping/connect but exposes no port could be anything

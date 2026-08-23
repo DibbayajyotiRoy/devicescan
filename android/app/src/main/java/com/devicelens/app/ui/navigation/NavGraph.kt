@@ -29,8 +29,8 @@ sealed class Screen(val route: String) {
 
 @Composable
 fun DeviceLensNavHost(
-    isLoggedIn: Boolean,
-    onLoginSuccess: () -> Unit
+    onboardingComplete: Boolean,
+    onOnboardingFinished: () -> Unit
 ) {
     val navController = rememberNavController()
     var showSettings by remember { mutableStateOf(false) }
@@ -49,7 +49,7 @@ fun DeviceLensNavHost(
     }
 
     // Locate mode sheet
-    locateDeviceId?.let { deviceId ->
+    locateDeviceId?.let {
         LocateModeSheet(
             onDismiss = { locateDeviceId = null }
         )
@@ -57,12 +57,15 @@ fun DeviceLensNavHost(
 
     NavHost(
         navController = navController,
-        startDestination = if (isLoggedIn) Screen.Status.route else Screen.Onboarding.route
+        // The entry point is now "has this person seen the intro", not "are they
+        // signed in". The scanner works without an account, so an account must
+        // not decide which screen the app opens on.
+        startDestination = if (onboardingComplete) Screen.Status.route else Screen.Onboarding.route
     ) {
         composable(Screen.Onboarding.route) {
             OnboardingScreen(
                 onComplete = {
-                    onLoginSuccess()
+                    onOnboardingFinished()
                     navController.navigate(Screen.Status.route) {
                         popUpTo(Screen.Onboarding.route) { inclusive = true }
                     }

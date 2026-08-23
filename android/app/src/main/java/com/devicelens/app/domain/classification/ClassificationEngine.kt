@@ -3,9 +3,7 @@ package com.devicelens.app.domain.classification
 import com.devicelens.app.data.db.DeviceEntity
 import com.devicelens.app.domain.model.DeviceSummary
 import com.devicelens.app.domain.model.RawDevice
-import com.devicelens.app.domain.scanner.BleScanner
 import com.devicelens.app.domain.scanner.MagnetometerMonitor
-import com.devicelens.app.domain.scanner.WifiScanner
 import com.devicelens.app.helpers.DeviceTypeInferrer
 import java.security.MessageDigest
 import javax.inject.Inject
@@ -37,73 +35,7 @@ class ClassificationEngine @Inject constructor(
         return if (v == "Unknown") null else v
     }
 
-    fun classifyRaw(
-        wifiDevices: List<RawDevice>,
-        bleResult: BleScanner.BleScanResult,
-        magReading: MagnetometerMonitor.MagnetometerReading,
-        existingDevices: List<DeviceEntity>,
-        networkId: String
-    ): List<DeviceSummary> {
-        val allRaw = mutableListOf<RawDevice>()
-        allRaw.addAll(wifiDevices)
-
-        bleResult.devices.forEach {
-            val vendor = if (it.vendor != "Unknown") it.vendor else lookupVendor(it.address) ?: "Unknown"
-            // Most BLE advertisers broadcast no name. Fall back to the resolved
-            // vendor ("Apple device") rather than a meaningless "Unknown Device".
-            val name = it.name ?: if (vendor != "Unknown") "$vendor device" else "Bluetooth device"
-            allRaw.add(
-                RawDevice(
-                    name = name,
-                    vendor = vendor,
-                    method = "BLE",
-                    rssi = it.rssi,
-                    mac = it.address
-                )
-            )
-        }
-
-        return classifyAll(allRaw, magReading, existingDevices, networkId)
-    }
-
     fun classify(
-        wifiResult: WifiScanner.WifiScanResult,
-        bleResult: BleScanner.BleScanResult,
-        magReading: MagnetometerMonitor.MagnetometerReading,
-        existingDevices: List<DeviceEntity>,
-        networkId: String
-    ): List<DeviceSummary> {
-        val allRaw = mutableListOf<RawDevice>()
-
-        wifiResult.devices.forEach {
-            allRaw.add(
-                RawDevice(
-                    name = it.hostname ?: it.ip,
-                    vendor = it.vendor,
-                    method = "WIFI",
-                    rssi = it.rssi,
-                    mac = it.macAddress,
-                    ipAddress = it.ip
-                )
-            )
-        }
-
-        bleResult.devices.forEach {
-            allRaw.add(
-                RawDevice(
-                    name = it.name ?: "Unknown Device",
-                    vendor = it.vendor,
-                    method = "BLE",
-                    rssi = it.rssi,
-                    mac = it.address
-                )
-            )
-        }
-
-        return classifyAll(allRaw, magReading, existingDevices, networkId)
-    }
-
-    private fun classifyAll(
         allRaw: List<RawDevice>,
         magReading: MagnetometerMonitor.MagnetometerReading,
         existingDevices: List<DeviceEntity>,
@@ -112,7 +44,6 @@ class ClassificationEngine @Inject constructor(
         return allRaw.map { raw ->
             val compositeKey = buildCompositeKey(raw.name, raw.vendor, raw.method, raw.mac, networkId)
             val existing = existingDevices.find { it.compositeKey == compositeKey }
-
             val isTrusted = existing?.isTrustedByUser ?: false
 
             // Keep any strong type the network fingerprinter already produced;
@@ -126,7 +57,8 @@ class ClassificationEngine @Inject constructor(
                 magnetometerAnomaly = magReading.anomalyDetected,
                 existingRisk = existing?.riskLevel,
                 deviceType = resolvedType,
-                openPorts = raw.openPorts
+                openPorts = raw.openPorts,
+                isTracker = raw.trackerLabel != null
             )
 
             DeviceSummary(
@@ -154,10 +86,16 @@ class ClassificationEngine @Inject constructor(
         magnetometerAnomaly: Boolean,
         existingRisk: String?,
         deviceType: String?,
-        openPorts: List<Int>?
+        openPorts: List<Int>?,
+        isTracker: Boolean
     ): String {
         // User trust is absolute
         if (isTrustedByUser) return "SAFE"
+
+        // A device that advertises itself as a location tracker is the single
+        // most direct answer to "is something following me", so it outranks the
+        // sticky-SUSPICIOUS rule below rather than waiting behind it.
+        if (isTracker) return "SUSPICIOUS"
 
         // SUSPICIOUS stays SUSPICIOUS until user trusts
         if (existingRisk == "SUSPICIOUS") return "SUSPICIOUS"

@@ -25,6 +25,9 @@ class SetupViewModel @Inject constructor(
     private val _setupComplete = MutableSharedFlow<Unit>()
     val setupComplete: SharedFlow<Unit> = _setupComplete
 
+    private val _isScanning = MutableStateFlow(false)
+    val isScanning: StateFlow<Boolean> = _isScanning
+
     fun toggle(compositeKey: String) {
         _trustedKeys.update { current ->
             if (current.contains(compositeKey)) current - compositeKey
@@ -34,6 +37,10 @@ class SetupViewModel @Inject constructor(
 
     fun trustAll() {
         _trustedKeys.value = devices.value.map { it.compositeKey }.toSet()
+    }
+
+    fun clearAll() {
+        _trustedKeys.value = emptySet()
     }
 
     fun complete() {
@@ -46,8 +53,25 @@ class SetupViewModel @Inject constructor(
     }
 
     fun startScan() {
+        if (_isScanning.value) return
         viewModelScope.launch {
-            scanOrchestrator.runScan()
+            _isScanning.value = true
+            try {
+                scanOrchestrator.runScan()
+            } finally {
+                _isScanning.value = false
+            }
         }
+    }
+
+    /**
+     * Runs a scan only if there is nothing to show.
+     *
+     * Arriving at this screen with an empty list is not a failure the user
+     * caused — it just means no scan has happened yet. Starting one is a better
+     * answer than showing them a "Retry" button for something that never ran.
+     */
+    fun scanIfEmpty() {
+        if (devices.value.isEmpty() && !_isScanning.value) startScan()
     }
 }
